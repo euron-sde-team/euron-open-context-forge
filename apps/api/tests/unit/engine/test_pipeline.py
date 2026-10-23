@@ -295,3 +295,64 @@ def test_message_count_matches_openai_recipe() -> None:
     msgs = [Message(role="user", content="hello world"), Message(role="assistant", content="hi")]
     expected = 3 + sum(3 + len(enc.encode(m.text())) for m in msgs)
     assert messages_tokens(msgs, tok) == expected
+
+
+def _tool_pair(i: int, output: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": f"t{i}", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": f"t{i}", "content": output},
+    ]
+
+
+def test_repeated_test_runs_collapse_despite_changing_timings() -> None:
+    msgs: list[dict[str, Any]] = [
+        {"role": "user", "content": "Fix the failing test in src/app/api.py"}
+    ]
+    for i in range(6):
+        msgs += _tool_pair(
+            i,
+            f"collected {120 + i} items\n\nFAILED tests/test_api.py::test_login "
+            f"- KeyError: 'user_id'\n1 failed, {119 + i} passed in {10 + i}.4{i}s",
+        )
+    msgs += [
+        {"role": "assistant", "content": "Still failing."},
+        {"role": "user", "content": "Fix it."},
+    ]
+    result = run(messages=msgs, max_input_tokens=5000)
+    tools = [m for m in result.messages if m.role == "tool"]
+    assert len(tools) == 1 and "124 passed" in tools[0].text()
+    assert structure_problems(result.messages) == []
+
+
+def test_lookups_of_different_ids_never_collapse() -> None:
+    msgs: list[dict[str, Any]] = [{"role": "user", "content": "Check both orders"}]
+    msgs += _tool_pair(1, "Order ORD-1001: status shipped, total $40.00, carrier UPS")
+    msgs += _tool_pair(2, "Order ORD-2002: status shipped, total $40.00, carrier UPS")
+    msgs += [
+        {"role": "assistant", "content": "Both shipped."},
+        {"role": "user", "content": "Thanks"},
+    ]
+    blob = "\n".join(m.text() for m in run(messages=msgs, max_input_tokens=5000).messages)
+    assert "ORD-1001" in blob and "ORD-2002" in blob
+
+
+def test_source_code_is_never_fuzzily_deduplicated() -> None:
+    code = "\n\n".join(
+        f"def load_item_{i}(payload: dict) -> dict:\n    value = payload.get('f{i}', {i})\n"
+        f"    return {{'ok': True, 'value': value * {i}}}"
+        for i in range(12)
+    )
+    msgs: list[dict[str, Any]] = [{"role": "user", "content": "Read the module"}]
+    msgs += _tool_pair(1, code)
+    msgs += [
+        {"role": "assistant", "content": "Read it."},
+        {"role": "user", "content": "Refactor it"},
+    ]
+    result = run(messages=msgs, max_input_tokens=20000)
+    assert any(m.text() == code for m in result.messages)

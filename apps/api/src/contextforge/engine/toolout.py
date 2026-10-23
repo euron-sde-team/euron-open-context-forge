@@ -7,6 +7,8 @@ Agents read far less of a tool result than they are sent. Three shapes cover mos
   strings are shortened. The result is always valid JSON (re-parsed before it is used).
 * **Logs and test output**: errors, warnings, failures, assertions and the last frames of
   a stack trace are kept, plus the head and tail; repeated lines collapse with a count.
+* **Source code** (a file read): never cut. Earlier re-reads of the same file are removed
+  by duplicate detection, so the latest read survives whole.
 * **Anything else**: head and tail with an omission marker.
 
 Reduction never invents content: every kept line is copied verbatim from the input.
@@ -19,7 +21,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from contextforge.engine.text import ERROR_WORDS, normalize
+from contextforge.engine.text import ERROR_WORDS, looks_like_code, normalize
 
 _SIGNAL = re.compile(
     r"(error|exception|traceback|fail|fatal|panic|warn|assert|expected|actual|denied|refused|"
@@ -70,6 +72,10 @@ def reduce_output(text: str, level: ReductionLevel, query_terms: set[str]) -> st
             json.loads(reduced)  # invariant: the output is valid JSON
             return reduced if len(reduced) < len(text) * 0.9 else None
     lines = text.splitlines()
+    if looks_like_code([ln for ln in lines if ln.strip()]):
+        # A file read: cutting its middle breaks the code a later edit needs. Repeated
+        # reads are removed by duplicate detection instead, keeping the latest whole.
+        return None
     if len(lines) >= level.head + level.tail + 4:
         reduced = _reduce_lines(lines, level, query_terms)
         return reduced if len(reduced) < len(text) * 0.9 else None

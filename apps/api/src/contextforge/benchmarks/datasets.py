@@ -123,6 +123,7 @@ def coding_case(seed: int, attempts: int, file_lines: int, budget: int) -> Case:
         ),
     ]
     call = 0
+    source = _python_file(rng, module, file_lines)  # re-reads return the same file
     for a in range(attempts):
         call += 1
         cid = f"call_{seed}_{call}"
@@ -139,7 +140,7 @@ def coding_case(seed: int, attempts: int, file_lines: int, budget: int) -> Case:
                 ],
             )
         )
-        msgs.append(_msg("tool", _python_file(rng, module, file_lines), tool_call_id=cid))
+        msgs.append(_msg("tool", source, tool_call_id=cid))
         call += 1
         cid = f"call_{seed}_{call}"
         msgs.append(

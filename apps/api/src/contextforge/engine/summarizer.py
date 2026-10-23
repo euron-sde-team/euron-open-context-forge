@@ -79,6 +79,8 @@ class SummaryOutput:
     tokens: int
     summarizer: str = "extractive"
     notes: list[str] = field(default_factory=list)
+    # Set when a non-default summarizer failed and the extractive one stood in.
+    fallback_reason: str | None = None
 
 
 class Summarizer(Protocol):

@@ -16,7 +16,7 @@ from contextforge.engine.profiles import BUILTIN_PROFILES, Profile, detect_workl
 from contextforge.engine.stages import build_units, clean, protect, rank
 from contextforge.engine.state import DocState, MsgState, Work
 from contextforge.engine.summarizer import ExtractiveSummarizer, Summarizer
-from contextforge.engine.text import salient_facts, terms
+from contextforge.engine.text import extract_facts, salient_facts, terms
 from contextforge.engine.tokenizers import (
     TokenizerRegistry,
     documents_tokens,
@@ -241,6 +241,12 @@ def _run(
                 f"summary ({assembled.summary.summarizer}): {assembled.summary.tokens} tokens"
             )
             step.notes.extend(assembled.summary.notes)
+            if assembled.summary.fallback_reason:
+                work.warn(
+                    "llm_summarizer_failed",
+                    "The LLM summarizer was unavailable, so the extractive summarizer was used",
+                    reason=assembled.summary.fallback_reason,
+                )
 
     # 7. Validate
     with clock.stage("validate", recount=False) as step:
@@ -304,10 +310,16 @@ def _validate(
     )
     struct_issues = structure_problems(assembled.messages, request.messages)
 
+    referenced: set[str] = set()
+    for m in request.messages:
+        if m.role not in ("tool", "system", "developer"):
+            referenced |= extract_facts(m.text())
     facts_in: set[str] = set()
     for m in request.messages:
         if m.role not in ("system", "developer"):
-            facts_in |= salient_facts(m.text(), tool=m.role == "tool")
+            facts_in |= salient_facts(
+                m.text(), tool=m.role == "tool", referenced=frozenset(referenced)
+            )
     retained = sum(1 for f in facts_in if f in blob)
 
     missing = [

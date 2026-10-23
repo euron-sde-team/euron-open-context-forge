@@ -26,6 +26,12 @@ _LOG_LINE = re.compile(
     r"|\s*at [\w$.<>]+\(|\s*File \"|Traceback|\s*\^+\s*$|[\w.]+(Error|Exception):|npm (ERR|WARN)"
     r"|E\s{2,}|FAILED |PASSED |\$ )"
 )
+# Unfenced source code (file reads in agent tool output): definitions, imports, blocks.
+_CODE_LINE = re.compile(
+    r"^\s*(def |class |import |from \S+ import |async def |return\b|if .*:$|for .*:$|while .*:$"
+    r"|try:$|except|elif |else:$|with .*:$|@\w+|function |const |let |var |export |public |private "
+    r"|package |func |fn |#include|[}\])];?$|.*[{;]\s*$)"
+)
 _BULLET = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(\[`])")
 _WORD = re.compile(r"[A-Za-z0-9_]+(?:[.\-/][A-Za-z0-9_]+)*")
@@ -89,6 +95,22 @@ _FACT_PATTERNS = [
     re.compile(r"\bport\s?\d{2,5}\b|:\d{4,5}\b", re.I),
     re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),  # ISO dates
 ]
+
+
+_MEASUREMENT = re.compile(
+    r"^(?:[$€£₹]\s?)?\d[\d,]*(?:\.\d+)?\s?(?:ms|s|sec|seconds|minutes|min|hours|h|days|KB|MB|GB|"
+    r"TB|%|rps|qps|tokens|req/s|USD|EUR|INR|GBP)?$|^\d{4}-\d{2}-\d{2}$|^:\d{4,5}$",
+    re.IGNORECASE,
+)
+
+
+def identity_facts(facts: frozenset[str]) -> frozenset[str]:
+    """Facts that identify something (ids, paths, names, versions), not measurements.
+
+    Durations, counts, sizes, percentages and dates change from one run of a tool to the
+    next; ids and paths say *which* thing a block is about.
+    """
+    return frozenset(f for f in facts if not _MEASUREMENT.match(f))
 
 
 @dataclass(slots=True)
@@ -155,10 +177,20 @@ def classify(body: str) -> BlockKind:
     log_lines = sum(1 for ln in lines if _LOG_LINE.match(ln))
     if len(lines) >= 2 and log_lines / len(lines) >= 0.5:
         return "log"
+    if looks_like_code(lines):
+        return "code"
     bullets = sum(1 for ln in lines if _BULLET.match(ln))
     if len(lines) >= 2 and bullets / len(lines) >= 0.6:
         return "list"
     return "prose"
+
+
+def looks_like_code(lines: list[str]) -> bool:
+    """Unfenced source: most lines are definitions, statements or indented bodies."""
+    if len(lines) < 3:
+        return False
+    code = sum(1 for ln in lines if _CODE_LINE.match(ln) or ln.startswith(("    ", "\t")))
+    return code / len(lines) >= 0.6 and any(_CODE_LINE.match(ln) for ln in lines)
 
 
 def looks_like_json(text: str) -> bool:
@@ -273,21 +305,28 @@ def importance(text: str, kind: BlockKind, facts: frozenset[str]) -> float:
     return min(1.0, score)
 
 
-def salient_facts(text: str, *, tool: bool = False) -> frozenset[str]:
-    """Facts that matter for the task.
+def salient_facts(
+    text: str, *, tool: bool = False, referenced: frozenset[str] = frozenset()
+) -> frozenset[str]:
+    """Facts that matter for the task: what the fact-retention metric counts.
 
-    For tool output, routine log lines (timestamps, request durations on INFO lines) are
-    noise rather than facts; only lines that signal a problem, and any non-log blocks,
-    contribute. Conversation text contributes everything.
+    Conversation text contributes every fact. Tool output is mostly bulk, so for logs and
+    JSON only facts on lines that signal a problem count, plus facts the conversation
+    itself refers to (``referenced``): the SKU the user asked about, not the 400 others in
+    the search results. Measurements on those lines (durations, counts) count only when
+    referenced. Prose and source code from tools count in full.
     """
     if not tool:
         return extract_facts(text)
     found: set[str] = set()
     for block in split_blocks(text):
-        if block.kind == "log":
+        if block.kind in ("log", "json"):
             for line in block.text.splitlines():
+                facts = extract_facts(line)
                 if LOG_SIGNAL.search(line):
-                    found |= extract_facts(line)
+                    found |= identity_facts(facts) | (facts & referenced)
+                else:
+                    found |= facts & referenced
         else:
             found |= extract_facts(block.text)
     return frozenset(found)

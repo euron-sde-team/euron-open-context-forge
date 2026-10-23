@@ -13,6 +13,7 @@ from contextforge.engine.text import (
     containment,
     digest,
     extract_facts,
+    identity_facts,
     importance,
     jaccard,
     normalize,
@@ -167,29 +168,55 @@ def clean(work: Work) -> int:
             b.tokens = work.tok.count(b.text)
 
     if opts.deduplicate:
-        seen_blocks: set[str] = set()
-        for m in reversed(work.msgs):
-            if m.dropped:
-                continue
-            blocks = m.blocks if m.blocks is not None else split_blocks(m.current_text())
-            kept = []
-            for b in reversed(blocks):
-                bkey = digest(normalize(b.text, fuzzy_numbers=b.kind == "log"))
-                big = (b.tokens or work.tok.count(b.text)) >= MIN_DEDUP_TOKENS
-                if m.blocks is not None and big and bkey in seen_blocks:
-                    removed += 1
-                    continue
-                if big:
-                    seen_blocks.add(bkey)
-                kept.append(b)
-            if m.blocks is not None:
-                m.blocks = list(reversed(kept))
-                if not m.blocks:
-                    _empty_out(m)
+        removed += _dedup_blocks(work)
 
     if opts.deduplicate and opts.strategy != "conservative":
         removed += _near_dup_blocks(work)
     removed += _dedup_documents(work)
+    return removed
+
+
+def _dedup_blocks(work: Work) -> int:
+    """Remove blocks repeated later in the conversation; the latest occurrence wins.
+
+    Conversation text must repeat exactly (whitespace aside). Tool output is machine
+    written and varies only in measurements from run to run ("collected 156 items",
+    "passed in 10.10s"), so its blocks match with digits ignored, but only when the later
+    block carries every identity fact (id, path, error class) of the earlier one. Two
+    lookups of different orders therefore never collapse into one.
+    """
+    removed = 0
+    exact: set[str] = set()
+    fuzzy: dict[str, frozenset[str]] = {}
+    for m in reversed(work.msgs):
+        if m.dropped:
+            continue
+        tool = m.message.role == "tool"
+        blocks = m.blocks if m.blocks is not None else split_blocks(m.current_text())
+        kept = []
+        for b in reversed(blocks):
+            # Source code is never matched fuzzily: load_user_3 and load_user_24 differ.
+            machine = (tool and b.kind != "code") or b.kind == "log"
+            # Short conversational replies ("ok", "Thanks!") are never removed; short
+            # machine-written lines ("collected 120 items") are.
+            floor = 1 if machine else MIN_DEDUP_TOKENS
+            big = (b.tokens or work.tok.count(b.text)) >= floor
+            ekey = digest(normalize(b.text))
+            fkey = digest(normalize(b.text, fuzzy_numbers=True))
+            ids = identity_facts(extract_facts(b.text)) if machine else frozenset()
+            duplicate = ekey in exact or (machine and fkey in fuzzy and ids <= fuzzy[fkey])
+            if m.blocks is not None and big and duplicate:
+                removed += 1
+                continue
+            if big:
+                exact.add(ekey)
+                if machine:
+                    fuzzy[fkey] = fuzzy.get(fkey, frozenset()) | ids
+            kept.append(b)
+        if m.blocks is not None:
+            m.blocks = list(reversed(kept))
+            if not m.blocks:
+                _empty_out(m)
     return removed
 
 
