@@ -1,0 +1,166 @@
+"use client";
+
+import { CheckCircle2Icon, TriangleAlertIcon } from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
+
+import { CodeBlock } from "@/components/code-block";
+import { CopyButton } from "@/components/copy-button";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Field, FieldError } from "@/components/ui/label";
+import { SimpleSelect } from "@/components/ui/select";
+import { useProfiles } from "@/features/profiles/api";
+import { useUpstreams } from "@/features/upstreams/api";
+import { errorMessage } from "@/lib/api/errors";
+import type { ApiKeyCreated } from "@/lib/api/types";
+import { proxySnippet, restSnippet } from "@/lib/snippets";
+
+import { useCreateKey } from "../api";
+
+export function KeyRevealed({ created }: { created: ApiKeyCreated }) {
+  const [origin, setOrigin] = React.useState("");
+  React.useEffect(() => setOrigin(window.location.origin), []);
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3 rounded-xl bg-warning-soft px-4 py-3 text-[13px]">
+        <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" />
+        <p className="text-foreground">
+          Copy this key now. It is shown <strong>once</strong>; ContextForge stores only a peppered hash and cannot show it again.
+        </p>
+      </div>
+      <div className="flex items-center gap-2 rounded-xl bg-muted p-1.5 pl-3.5">
+        <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] select-all" data-testid="new-key">
+          {created.key}
+        </code>
+        <CopyButton value={created.key} label="Copy key" variant="default" />
+      </div>
+      <CodeBlock
+        samples={[
+          { id: "rest", label: "REST", code: restSnippet(origin, created.key) },
+          { id: "proxy", label: "OpenAI SDK", code: proxySnippet(origin, created.key) },
+        ]}
+      />
+    </div>
+  );
+}
+
+const NONE = "__none__";
+
+export function CreateKeyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const create = useCreateKey();
+  const profiles = useProfiles();
+  const upstreams = useUpstreams();
+  const [name, setName] = React.useState("");
+  const [rpm, setRpm] = React.useState("");
+  const [profile, setProfile] = React.useState(NONE);
+  const [upstream, setUpstream] = React.useState(NONE);
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [serverError, setServerError] = React.useState<string | null>(null);
+  const [created, setCreated] = React.useState<ApiKeyCreated | null>(null);
+
+  React.useEffect(() => {
+    if (open) {
+      setName("");
+      setRpm("");
+      setProfile(NONE);
+      setUpstream(NONE);
+      setErrors({});
+      setServerError(null);
+      setCreated(null);
+    }
+  }, [open]);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!name.trim()) errs.name = 'Name it after the app that uses it, for example "support-bot".';
+    const n = rpm.trim() ? Number(rpm) : null;
+    if (n != null && (!Number.isInteger(n) || n < 1)) errs.rpm = "Whole number above 0, or empty for the service default.";
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    setServerError(null);
+    create.mutate(
+      {
+        name: name.trim(),
+        rpm_limit: n,
+        default_profile: profile === NONE ? null : profile,
+        default_upstream: upstream === NONE ? null : upstream,
+      },
+      {
+        onSuccess: (k) => {
+          setCreated(k);
+          toast.success("Service key created.");
+        },
+        onError: (err) => setServerError(errorMessage(err)),
+      },
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !create.isPending && onOpenChange(o)}>
+      <DialogContent className={created ? "max-w-2xl" : "max-w-lg"}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {created && <CheckCircle2Icon className="size-5 text-savings" />}
+            {created ? `Key "${created.name}" is ready` : "New service key"}
+          </DialogTitle>
+          <DialogDescription>
+            {created
+              ? "Use it as a Bearer token. Revoke it any time from API keys."
+              : "Applications use this key to call /v1/context and the OpenAI-compatible proxy."}
+          </DialogDescription>
+        </DialogHeader>
+        {created ? (
+          <>
+            <DialogBody>
+              <KeyRevealed created={created} />
+            </DialogBody>
+            <DialogFooter>
+              <Button onClick={() => onOpenChange(false)}>I have copied the key</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <form onSubmit={submit} className="flex min-h-0 flex-col" noValidate>
+            <DialogBody className="space-y-4">
+              <Field label="Name" htmlFor="key-name" error={errors.name}>
+                <Input id="key-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="support-bot" />
+              </Field>
+              <Field label="Requests per minute" htmlFor="key-rpm" error={errors.rpm} hint="Over the limit, calls get HTTP 429 with Retry-After.">
+                <Input id="key-rpm" inputMode="numeric" className="tabular" placeholder="Service default" value={rpm} onChange={(e) => setRpm(e.target.value)} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Default profile" htmlFor="key-profile" hint="Used when a request names none">
+                  <SimpleSelect
+                    id="key-profile"
+                    value={profile}
+                    onValueChange={(v) => setProfile(v || NONE)}
+                    options={[{ value: NONE, label: "Detect per request" }, ...(profiles.data ?? []).map((p) => ({ value: p.name, label: p.name }))]}
+                  />
+                </Field>
+                <Field label="Default upstream" htmlFor="key-upstream" hint="For the proxy">
+                  <SimpleSelect
+                    id="key-upstream"
+                    value={upstream}
+                    onValueChange={(v) => setUpstream(v || NONE)}
+                    options={[{ value: NONE, label: "First enabled" }, ...(upstreams.data ?? []).map((u) => ({ value: u.name, label: u.name }))]}
+                  />
+                </Field>
+              </div>
+              {serverError && <FieldError>{serverError}</FieldError>}
+            </DialogBody>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? "Creating..." : "Create key"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

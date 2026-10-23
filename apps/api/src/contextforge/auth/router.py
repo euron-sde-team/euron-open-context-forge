@@ -9,7 +9,7 @@ from contextforge.auth.dependencies import SESSION_COOKIE, CurrentUser
 from contextforge.auth.schemas import LoginRequest, PasswordChange, SessionOut, UserOut
 from contextforge.core.deps import ContainerDep, SessionDep, client_ip
 from contextforge.core.errors import RateLimitedError
-from contextforge.core.schemas import Message
+from contextforge.core.schemas import Ack
 from contextforge.core.security import issue_session
 from contextforge.limits.limiter import LimitDecision
 from contextforge.users.models import User
@@ -64,10 +64,10 @@ async def login(
     return _session(response, container, user)
 
 
-@router.post("/logout", response_model=Message, summary="Sign out")
-async def logout(response: Response) -> Message:
+@router.post("/logout", response_model=Ack, summary="Sign out")
+async def logout(response: Response) -> Ack:
     response.delete_cookie(SESSION_COOKIE, path="/")
-    return Message(message="Signed out")
+    return Ack(message="Signed out")
 
 
 @router.get("/me", response_model=UserOut, summary="The signed-in user")

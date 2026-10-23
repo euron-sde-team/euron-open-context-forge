@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> None:
     p.set_defaults(fn=_owner)
 
     p = sub.add_parser("seed-demo", help="load demo configuration, history and live traffic")
-    p.add_argument("--days", type=int, default=30, help="days of run history to backfill")
+    p.add_argument("--days", type=int, default=60, help="days of run history to backfill")
     p.add_argument("--traffic", type=int, default=40, help="live requests to send afterwards")
     p.add_argument(
         "--api-url", default=os.environ.get("CONTEXTFORGE_API_URL", "http://localhost:4330")

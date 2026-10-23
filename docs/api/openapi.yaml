@@ -1,0 +1,3655 @@
+openapi: 3.1.0
+info:
+  title: Euron Open ContextForge
+  description: "\nSelf-hosted context optimization engine. Send the messages, retrieved documents and\
+    \ tool\noutput you are about to give an LLM; get back the smallest context that still carries every\n\
+    task-critical fact, with real before and after token counts, warnings and a per-stage trace.\n\n*\
+    \ `/v1/context/*`: optimize, count tokens, summarize, rank, background jobs. Authenticate\n  with\
+    \ a service key (`Authorization: Bearer cfk_...`).\n* `/v1/chat/completions`: OpenAI-compatible proxy\
+    \ that optimizes, then forwards upstream\n  (any OpenAI-compatible API, TokenShield or SmartRouter).\n\
+    * `/api/v1/*`: the dashboard API (session token from `POST /api/v1/auth/login`).\n"
+  version: 0.1.0
+paths:
+  /v1/context/optimize:
+    post:
+      tags:
+      - context
+      summary: Optimize messages and documents to fit a token budget
+      operationId: optimize_v1_context_optimize_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+        required: true
+      responses:
+        '200':
+          description: The optimized context with real before and after counts, warnings and a per-stage
+            trace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/context/count-tokens:
+    post:
+      tags:
+      - context
+      summary: Count tokens with the model's tokenizer (or a marked estimate)
+      operationId: count_tokens_v1_context_count_tokens_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CountTokensRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountTokensResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/context/summarize:
+    post:
+      tags:
+      - context
+      summary: Structured summary of a conversation
+      operationId: summarize_v1_context_summarize_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/context/rank:
+    post:
+      tags:
+      - context
+      summary: Rank passages by relevance, dropping duplicates and irrelevant ones
+      operationId: rank_v1_context_rank_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RankRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/context/jobs:
+    post:
+      tags:
+      - context
+      summary: Optimize in the background (large inputs)
+      operationId: create_job_v1_context_jobs_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/context/jobs/{job_id}:
+    get:
+      tags:
+      - context
+      summary: Job status, and the result when done
+      operationId: get_job_v1_context_jobs__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/chat/completions:
+    post:
+      tags:
+      - proxy
+      summary: 'OpenAI-compatible: optimize, then forward upstream'
+      operationId: chat_completions_v1_chat_completions_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/models:
+    get:
+      tags:
+      - proxy
+      summary: Models of the default upstream (OpenAI-compatible)
+      operationId: models_v1_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/auth/login:
+    post:
+      tags:
+      - auth
+      summary: Sign in to the dashboard
+      operationId: login_api_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - auth
+      summary: Sign out
+      operationId: logout_api_v1_auth_logout_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ack'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - auth
+      summary: The signed-in user
+      operationId: me_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+  /api/v1/auth/password:
+    post:
+      tags:
+      - auth
+      summary: Change your password
+      operationId: password_api_v1_auth_password_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users:
+    get:
+      tags:
+      - users
+      summary: List dashboard users
+      operationId: list_users_api_v1_users_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/UserOut'
+                type: array
+                title: Response List Users Api V1 Users Get
+    post:
+      tags:
+      - users
+      summary: Invite a dashboard user
+      operationId: create_user_api_v1_users_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users/{user_id}:
+    patch:
+      tags:
+      - users
+      summary: Update a user's name, role or access
+      operationId: update_user_api_v1_users__user_id__patch
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/keys:
+    get:
+      tags:
+      - api keys
+      summary: List service keys
+      operationId: list_keys_api_v1_keys_get
+      parameters:
+      - name: include_revoked
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Revoked
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeyOut'
+                title: Response List Keys Api V1 Keys Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - api keys
+      summary: Create a key (shown once)
+      operationId: create_key_api_v1_keys_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyCreated'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/keys/{key_id}:
+    patch:
+      tags:
+      - api keys
+      summary: Update a key's name, limit or defaults
+      operationId: update_key_api_v1_keys__key_id__patch
+      parameters:
+      - name: key_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Key Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/keys/{key_id}/revoke:
+    post:
+      tags:
+      - api keys
+      summary: Revoke a key immediately
+      operationId: revoke_key_api_v1_keys__key_id__revoke_post
+      parameters:
+      - name: key_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Key Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/profiles:
+    get:
+      tags:
+      - profiles
+      summary: Workload profiles (built-in and custom)
+      operationId: list_profiles_api_v1_profiles_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProfileOut'
+                type: array
+                title: Response List Profiles Api V1 Profiles Get
+    post:
+      tags:
+      - profiles
+      summary: Create a custom profile
+      operationId: create_profile_api_v1_profiles_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/profiles/{name}:
+    put:
+      tags:
+      - profiles
+      summary: Edit a profile's weights
+      operationId: update_profile_api_v1_profiles__name__put
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          title: Name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - profiles
+      summary: Delete a custom profile or reset a built-in one
+      operationId: delete_profile_api_v1_profiles__name__delete
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          title: Name
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/upstreams:
+    get:
+      tags:
+      - upstreams
+      summary: Upstream LLM endpoints
+      operationId: list_upstreams_api_v1_upstreams_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/UpstreamOut'
+                type: array
+                title: Response List Upstreams Api V1 Upstreams Get
+    post:
+      tags:
+      - upstreams
+      summary: Add an upstream
+      operationId: create_upstream_api_v1_upstreams_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpstreamIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/upstreams/{upstream_id}:
+    patch:
+      tags:
+      - upstreams
+      summary: Edit an upstream
+      operationId: update_upstream_api_v1_upstreams__upstream_id__patch
+      parameters:
+      - name: upstream_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Upstream Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpstreamUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - upstreams
+      summary: Remove an upstream
+      operationId: delete_upstream_api_v1_upstreams__upstream_id__delete
+      parameters:
+      - name: upstream_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Upstream Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs:
+    get:
+      tags:
+      - runs
+      summary: Optimization runs, newest first
+      operationId: list_runs_api_v1_runs_get
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: source
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(api|proxy|job|playground|benchmark)$
+          - type: 'null'
+          title: Source
+      - name: workload
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(coding|research|support|agent|rag|chat)$
+          - type: 'null'
+          title: Workload
+      - name: budget_missed
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Budget Missed
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page_RunOut_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}:
+    get:
+      tags:
+      - runs
+      summary: One run with its trace
+      operationId: get_run_api_v1_runs__run_id__get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}/content:
+    get:
+      tags:
+      - runs
+      summary: Stored input and output (STORE_CONTENT only)
+      operationId: run_content_api_v1_runs__run_id__content_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Run Content Api V1 Runs  Run Id  Content Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/analytics/overview:
+    get:
+      tags:
+      - runs
+      summary: Savings and quality
+      operationId: overview_api_v1_analytics_overview_get
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 365
+          minimum: 1
+          default: 30
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/jobs:
+    get:
+      tags:
+      - jobs
+      summary: Recent background jobs
+      operationId: list_jobs_api_v1_jobs_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobOut'
+                title: Response List Jobs Api V1 Jobs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/benchmarks:
+    get:
+      tags:
+      - benchmarks
+      summary: Benchmark runs, newest first
+      operationId: list_runs_api_v1_benchmarks_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BenchmarkRunOut'
+                title: Response List Runs Api V1 Benchmarks Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - benchmarks
+      summary: Run the benchmark (executed by the worker)
+      operationId: queue_run_api_v1_benchmarks_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BenchmarkRunIn'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkRunOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/benchmarks/dataset:
+    get:
+      tags:
+      - benchmarks
+      summary: The committed benchmark cases
+      operationId: dataset_api_v1_benchmarks_dataset_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DatasetCase'
+                type: array
+                title: Response Dataset Api V1 Benchmarks Dataset Get
+  /api/v1/benchmarks/{run_id}:
+    get:
+      tags:
+      - benchmarks
+      summary: One run with per-case results
+      operationId: get_run_api_v1_benchmarks__run_id__get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkRunDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/benchmarks/{run_id}/report.md:
+    get:
+      tags:
+      - benchmarks
+      summary: The run's markdown report
+      operationId: report_api_v1_benchmarks__run_id__report_md_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/playground/samples:
+    get:
+      tags:
+      - playground
+      summary: Sample inputs to try
+      operationId: samples_api_v1_playground_samples_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Sample'
+                type: array
+                title: Response Samples Api V1 Playground Samples Get
+  /api/v1/playground/samples/{sample_id}:
+    get:
+      tags:
+      - playground
+      summary: A sample as an optimize request body
+      operationId: sample_api_v1_playground_samples__sample_id__get
+      parameters:
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sample Api V1 Playground Samples  Sample Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/playground/optimize:
+    post:
+      tags:
+      - playground
+      summary: Optimize from the dashboard
+      operationId: optimize_api_v1_playground_optimize_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/audit:
+    get:
+      tags:
+      - audit
+      summary: Append-only audit log
+      operationId: list_audit_api_v1_audit_get
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: action
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page_AuditOut_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /healthz:
+    get:
+      tags:
+      - system
+      summary: Liveness
+      operationId: healthz_healthz_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Healthz Healthz Get
+  /health:
+    get:
+      tags:
+      - system
+      summary: Liveness (alias of /healthz)
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+  /readyz:
+    get:
+      tags:
+      - system
+      summary: 'Readiness: Postgres reachable (Redis too, when configured)'
+      operationId: readyz_readyz_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Readyz Readyz Get
+  /api/v1/system:
+    get:
+      tags:
+      - system
+      summary: Deployment configuration
+      operationId: system_api_v1_system_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfo'
+components:
+  schemas:
+    Ack:
+      properties:
+        ok:
+          type: boolean
+          title: Ok
+          default: true
+        message:
+          type: string
+          title: Message
+          default: ''
+      type: object
+      title: Ack
+    Allocation:
+      properties:
+        category:
+          type: string
+          enum:
+          - history
+          - tool
+          - documents
+          - summary
+          title: Category
+        weight:
+          type: number
+          title: Weight
+        budget:
+          type: integer
+          title: Budget
+        used:
+          type: integer
+          title: Used
+      type: object
+      required:
+      - category
+      - weight
+      - budget
+      - used
+      title: Allocation
+    AuditOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        at:
+          type: string
+          format: date-time
+          title: At
+        actor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Actor Id
+        actor_email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actor Email
+        action:
+          type: string
+          title: Action
+        target_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Type
+        target_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Id
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        ip:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ip
+      type: object
+      required:
+      - id
+      - at
+      - actor_id
+      - actor_email
+      - action
+      - target_type
+      - target_id
+      - details
+      - ip
+      title: AuditOut
+    BenchmarkRunDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          type: string
+          title: Status
+        dataset_version:
+          type: string
+          title: Dataset Version
+        cases:
+          type: integer
+          title: Cases
+        runs_per_case:
+          type: integer
+          title: Runs Per Case
+        summary:
+          items:
+            $ref: '#/components/schemas/MethodSummary'
+          type: array
+          title: Summary
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        finished_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finished At
+        results:
+          items:
+            $ref: '#/components/schemas/CaseResult'
+          type: array
+          title: Results
+      type: object
+      required:
+      - id
+      - status
+      - dataset_version
+      - cases
+      - runs_per_case
+      - summary
+      - error
+      - created_at
+      - finished_at
+      - results
+      title: BenchmarkRunDetail
+    BenchmarkRunIn:
+      properties:
+        runs_per_case:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Runs Per Case
+          description: Timed repetitions per case
+          default: 3
+      type: object
+      title: BenchmarkRunIn
+    BenchmarkRunOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          type: string
+          title: Status
+        dataset_version:
+          type: string
+          title: Dataset Version
+        cases:
+          type: integer
+          title: Cases
+        runs_per_case:
+          type: integer
+          title: Runs Per Case
+        summary:
+          items:
+            $ref: '#/components/schemas/MethodSummary'
+          type: array
+          title: Summary
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        finished_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finished At
+      type: object
+      required:
+      - id
+      - status
+      - dataset_version
+      - cases
+      - runs_per_case
+      - summary
+      - error
+      - created_at
+      - finished_at
+      title: BenchmarkRunOut
+    Breakdown:
+      properties:
+        key:
+          type: string
+          title: Key
+        runs:
+          type: integer
+          title: Runs
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        reduction_percent:
+          type: number
+          title: Reduction Percent
+      type: object
+      required:
+      - key
+      - runs
+      - tokens_before
+      - tokens_after
+      - reduction_percent
+      title: Breakdown
+    CaseResult:
+      properties:
+        case_id:
+          type: string
+          title: Case Id
+        workload:
+          type: string
+          title: Workload
+        method:
+          type: string
+          title: Method
+        budget:
+          type: integer
+          title: Budget
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        reduction_percent:
+          type: number
+          title: Reduction Percent
+        budget_met:
+          type: boolean
+          title: Budget Met
+        fact_retention:
+          type: number
+          title: Fact Retention
+        facts_missing:
+          items:
+            type: string
+          type: array
+          title: Facts Missing
+        citation_retention:
+          type: number
+          title: Citation Retention
+        reader_accuracy:
+          type: number
+          title: Reader Accuracy
+        latency_ms_p50:
+          type: number
+          title: Latency Ms P50
+        latency_ms_p95:
+          type: number
+          title: Latency Ms P95
+      type: object
+      required:
+      - case_id
+      - workload
+      - method
+      - budget
+      - tokens_before
+      - tokens_after
+      - reduction_percent
+      - budget_met
+      - fact_retention
+      - facts_missing
+      - citation_retention
+      - reader_accuracy
+      - latency_ms_p50
+      - latency_ms_p95
+      title: CaseResult
+    CitationEntry:
+      properties:
+        status:
+          type: string
+          enum:
+          - kept
+          - compressed
+          - merged
+          - dropped
+          title: Status
+        into:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Into
+          description: 'For merged duplicates: the id that was kept'
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - status
+      title: CitationEntry
+    ContentPart:
+      properties:
+        type:
+          type: string
+          title: Type
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+      additionalProperties: true
+      type: object
+      required:
+      - type
+      title: ContentPart
+      description: One part of a multi-part message. Text parts may be optimized; others never are.
+    CountTokensRequest:
+      properties:
+        model:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Model
+        messages:
+          items:
+            $ref: '#/components/schemas/Message'
+          type: array
+          maxItems: 20000
+          title: Messages
+        documents:
+          items:
+            $ref: '#/components/schemas/Document'
+          type: array
+          maxItems: 20000
+          title: Documents
+        text:
+          anyOf:
+          - type: string
+            maxLength: 20000000
+          - type: 'null'
+          title: Text
+        allow_estimate:
+          type: boolean
+          title: Allow Estimate
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - model
+      title: CountTokensRequest
+    CountTokensResponse:
+      properties:
+        model:
+          type: string
+          title: Model
+        tokenizer:
+          $ref: '#/components/schemas/TokenizerInfo'
+        total:
+          type: integer
+          title: Total
+        messages_tokens:
+          type: integer
+          title: Messages Tokens
+        documents_tokens:
+          type: integer
+          title: Documents Tokens
+        text_tokens:
+          type: integer
+          title: Text Tokens
+        per_message:
+          items:
+            type: integer
+          type: array
+          title: Per Message
+        per_document:
+          items:
+            type: integer
+          type: array
+          title: Per Document
+      type: object
+      required:
+      - model
+      - tokenizer
+      - total
+      - messages_tokens
+      - documents_tokens
+      - text_tokens
+      - per_message
+      - per_document
+      title: CountTokensResponse
+    DatasetCase:
+      properties:
+        id:
+          type: string
+          title: Id
+        workload:
+          type: string
+          title: Workload
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        model:
+          type: string
+          title: Model
+        max_input_tokens:
+          type: integer
+          title: Max Input Tokens
+        tokens:
+          type: integer
+          title: Tokens
+        messages:
+          type: integer
+          title: Messages
+        documents:
+          type: integer
+          title: Documents
+        gold_facts:
+          type: integer
+          title: Gold Facts
+        required_citations:
+          type: integer
+          title: Required Citations
+      type: object
+      required:
+      - id
+      - workload
+      - title
+      - description
+      - model
+      - max_input_tokens
+      - tokens
+      - messages
+      - documents
+      - gold_facts
+      - required_citations
+      title: DatasetCase
+    Document:
+      properties:
+        id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Id
+        text:
+          type: string
+          title: Text
+        source:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Source
+        title:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Title
+        score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Score
+          description: Optional retriever score, blended into ranking
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - text
+      title: Document
+      description: A retrieved passage. ``id`` is the citation handle and is never rewritten.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    JobAccepted:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          type: string
+          title: Status
+          default: queued
+        poll:
+          type: string
+          title: Poll
+          description: GET this path until status is succeeded or failed
+      type: object
+      required:
+      - id
+      - poll
+      title: JobAccepted
+    JobOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - succeeded
+          - failed
+          title: Status
+        model:
+          type: string
+          title: Model
+        payload_bytes:
+          type: integer
+          title: Payload Bytes
+        attempts:
+          type: integer
+          title: Attempts
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        finished_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finished At
+        run_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Run Id
+        error:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Error
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/OptimizeResponse'
+          - type: 'null'
+          description: Present once the job succeeded
+      type: object
+      required:
+      - id
+      - status
+      - model
+      - payload_bytes
+      - attempts
+      - created_at
+      - finished_at
+      - run_id
+      title: JobOut
+    KeyCreated:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        prefix:
+          type: string
+          title: Prefix
+        display:
+          type: string
+          title: Display
+          description: 'Safe identifier: cfk_<prefix>_****'
+        rpm_limit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Rpm Limit
+        default_profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Profile
+        default_upstream:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Upstream
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        revoked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revoked At
+        last_used_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Used At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        key:
+          type: string
+          title: Key
+          description: The full key. Shown once; store it now
+      type: object
+      required:
+      - id
+      - name
+      - prefix
+      - display
+      - rpm_limit
+      - default_profile
+      - default_upstream
+      - expires_at
+      - revoked_at
+      - last_used_at
+      - created_at
+      - key
+      title: KeyCreated
+    KeyIn:
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+        rpm_limit:
+          anyOf:
+          - type: integer
+            maximum: 1000000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Rpm Limit
+        default_profile:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          - type: 'null'
+          title: Default Profile
+        default_upstream:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          - type: 'null'
+          title: Default Upstream
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+      type: object
+      required:
+      - name
+      title: KeyIn
+    KeyOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        prefix:
+          type: string
+          title: Prefix
+        display:
+          type: string
+          title: Display
+          description: 'Safe identifier: cfk_<prefix>_****'
+        rpm_limit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Rpm Limit
+        default_profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Profile
+        default_upstream:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Upstream
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        revoked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revoked At
+        last_used_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Used At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - prefix
+      - display
+      - rpm_limit
+      - default_profile
+      - default_upstream
+      - expires_at
+      - revoked_at
+      - last_used_at
+      - created_at
+      title: KeyOut
+    KeyUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 1
+          - type: 'null'
+          title: Name
+        rpm_limit:
+          anyOf:
+          - type: integer
+            maximum: 1000000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Rpm Limit
+        default_profile:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          - type: 'null'
+          title: Default Profile
+        default_upstream:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          - type: 'null'
+          title: Default Upstream
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+      type: object
+      title: KeyUpdate
+    LoginRequest:
+      properties:
+        email:
+          type: string
+          maxLength: 320
+          pattern: ^[^@\s]+@[^@\s]+\.[^@\s]+$
+          title: Email
+        password:
+          type: string
+          maxLength: 256
+          minLength: 1
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: LoginRequest
+    Message:
+      properties:
+        role:
+          type: string
+          enum:
+          - system
+          - developer
+          - user
+          - assistant
+          - tool
+          title: Role
+        content:
+          anyOf:
+          - type: string
+          - items:
+              $ref: '#/components/schemas/ContentPart'
+            type: array
+          - type: 'null'
+          title: Content
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        tool_calls:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ToolCall'
+            type: array
+          - type: 'null'
+          title: Tool Calls
+        tool_call_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Call Id
+      additionalProperties: true
+      type: object
+      required:
+      - role
+      title: Message
+    MethodSummary:
+      properties:
+        method:
+          type: string
+          title: Method
+        cases:
+          type: integer
+          title: Cases
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        reduction_percent:
+          type: number
+          title: Reduction Percent
+        budget_met:
+          type: integer
+          title: Budget Met
+        fact_retention:
+          type: number
+          title: Fact Retention
+        citation_retention:
+          type: number
+          title: Citation Retention
+        reader_accuracy:
+          type: number
+          title: Reader Accuracy
+        latency_ms_p50:
+          type: number
+          title: Latency Ms P50
+        latency_ms_p95:
+          type: number
+          title: Latency Ms P95
+      type: object
+      required:
+      - method
+      - cases
+      - tokens_before
+      - tokens_after
+      - reduction_percent
+      - budget_met
+      - fact_retention
+      - citation_retention
+      - reader_accuracy
+      - latency_ms_p50
+      - latency_ms_p95
+      title: MethodSummary
+    OptimizeOptions:
+      properties:
+        max_input_tokens:
+          anyOf:
+          - type: integer
+            maximum: 10000000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Input Tokens
+          description: Budget for messages plus documents. Omit to clean only (dedup, tool output)
+        reserve_output_tokens:
+          type: integer
+          maximum: 1000000.0
+          minimum: 0.0
+          title: Reserve Output Tokens
+          description: Room kept free for the model's answer
+          default: 0
+        strategy:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Strategy
+          default: balanced
+        workload:
+          type: string
+          enum:
+          - auto
+          - coding
+          - research
+          - support
+          - agent
+          - rag
+          - chat
+          title: Workload
+          description: Adaptive budget profile; auto detects it from the input
+          default: auto
+        profile:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Profile
+          description: Name of a stored profile (service only); overrides workload weights
+        preserve_recent_messages:
+          type: integer
+          maximum: 1000.0
+          minimum: 0.0
+          title: Preserve Recent Messages
+          default: 4
+        preserve_system_instructions:
+          type: boolean
+          title: Preserve System Instructions
+          description: System and developer messages are always returned verbatim; with false, exact duplicates
+            among them may be removed
+          default: true
+        pin_messages:
+          items:
+            type: integer
+          type: array
+          maxItems: 1000
+          title: Pin Messages
+          description: Message indexes never rewritten
+        must_keep:
+          items:
+            type: string
+          type: array
+          maxItems: 200
+          title: Must Keep
+          description: Strings that must survive verbatim (ids, values, phrases)
+        deduplicate:
+          type: boolean
+          title: Deduplicate
+          default: true
+        summarize_history:
+          type: boolean
+          title: Summarize History
+          default: true
+        reduce_tool_output:
+          type: boolean
+          title: Reduce Tool Output
+          default: true
+        rank_documents:
+          type: boolean
+          title: Rank Documents
+          default: true
+        drop_irrelevant_documents:
+          type: boolean
+          title: Drop Irrelevant Documents
+          default: true
+        max_documents:
+          anyOf:
+          - type: integer
+            maximum: 10000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Max Documents
+        query:
+          anyOf:
+          - type: string
+            maxLength: 20000
+          - type: 'null'
+          title: Query
+          description: Ranking query; defaults to the latest user turn
+        summary_role:
+          type: string
+          enum:
+          - user
+          - assistant
+          - system
+          title: Summary Role
+          description: Role of the generated summary message. user keeps quoted tool and document text
+            out of system authority
+          default: user
+        summarizer:
+          type: string
+          enum:
+          - extractive
+          - llm
+          title: Summarizer
+          default: extractive
+        on_budget_failure:
+          type: string
+          enum:
+          - warn
+          - error
+          title: On Budget Failure
+          description: warn returns the best safe result with budget_met=false; error returns 422
+          default: warn
+        allow_estimate:
+          type: boolean
+          title: Allow Estimate
+          description: Allow an explicitly marked token estimate when the model's tokenizer is unknown;
+            false returns unsupported_tokenizer instead
+          default: true
+        include_trace:
+          type: boolean
+          title: Include Trace
+          default: true
+      additionalProperties: false
+      type: object
+      title: OptimizeOptions
+    OptimizeRequest:
+      properties:
+        model:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Model
+        messages:
+          items:
+            $ref: '#/components/schemas/Message'
+          type: array
+          maxItems: 20000
+          title: Messages
+        documents:
+          items:
+            $ref: '#/components/schemas/Document'
+          type: array
+          maxItems: 20000
+          title: Documents
+        options:
+          $ref: '#/components/schemas/OptimizeOptions'
+      additionalProperties: false
+      type: object
+      required:
+      - model
+      title: OptimizeRequest
+    OptimizeResponse:
+      properties:
+        optimized_messages:
+          items:
+            $ref: '#/components/schemas/Message'
+          type: array
+          title: Optimized Messages
+        optimized_documents:
+          items:
+            $ref: '#/components/schemas/Document'
+          type: array
+          title: Optimized Documents
+        citation_map:
+          additionalProperties:
+            $ref: '#/components/schemas/CitationEntry'
+          type: object
+          title: Citation Map
+        citations_preserved:
+          type: boolean
+          title: Citations Preserved
+        stats:
+          $ref: '#/components/schemas/Stats'
+        tokenizer:
+          $ref: '#/components/schemas/TokenizerInfo'
+        strategy:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Strategy
+        workload:
+          type: string
+          enum:
+          - coding
+          - research
+          - support
+          - agent
+          - rag
+          - chat
+          title: Workload
+        profile:
+          type: string
+          title: Profile
+        allocation:
+          items:
+            $ref: '#/components/schemas/Allocation'
+          type: array
+          title: Allocation
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        warnings:
+          items:
+            $ref: '#/components/schemas/OptimizeWarning'
+          type: array
+          title: Warnings
+        trace:
+          items:
+            $ref: '#/components/schemas/TraceStep'
+          type: array
+          title: Trace
+        run_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Run Id
+          description: 'Id of the recorded run (dashboard: Runs)'
+        cached:
+          type: boolean
+          title: Cached
+          description: Served from the result cache
+          default: false
+        cost_avoided_usd:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cost Avoided Usd
+          description: 'Estimate: tokens removed x the model''s list input price'
+      type: object
+      required:
+      - optimized_messages
+      - optimized_documents
+      - citation_map
+      - citations_preserved
+      - stats
+      - tokenizer
+      - strategy
+      - workload
+      - profile
+      - allocation
+      - summary
+      - warnings
+      - trace
+      title: OptimizeResponse
+    OptimizeWarning:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+      type: object
+      required:
+      - code
+      - message
+      title: OptimizeWarning
+    Overview:
+      properties:
+        days:
+          type: integer
+          title: Days
+        runs:
+          type: integer
+          title: Runs
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        tokens_saved:
+          type: integer
+          title: Tokens Saved
+        reduction_percent:
+          type: number
+          title: Reduction Percent
+        fact_retention:
+          type: number
+          title: Fact Retention
+        budget_met_rate:
+          type: number
+          title: Budget Met Rate
+        cache_hit_rate:
+          type: number
+          title: Cache Hit Rate
+        avg_latency_ms:
+          type: number
+          title: Avg Latency Ms
+        cost_avoided:
+          type: integer
+          title: Cost Avoided
+          description: Estimated from the list price table
+        previous:
+          additionalProperties:
+            type: number
+          type: object
+          title: Previous
+          description: Same metrics for the previous period, for trend arrows
+        series:
+          items:
+            $ref: '#/components/schemas/Point'
+          type: array
+          title: Series
+        by_workload:
+          items:
+            $ref: '#/components/schemas/Breakdown'
+          type: array
+          title: By Workload
+        by_source:
+          items:
+            $ref: '#/components/schemas/Breakdown'
+          type: array
+          title: By Source
+        by_model:
+          items:
+            $ref: '#/components/schemas/Breakdown'
+          type: array
+          title: By Model
+      type: object
+      required:
+      - days
+      - runs
+      - tokens_before
+      - tokens_after
+      - tokens_saved
+      - reduction_percent
+      - fact_retention
+      - budget_met_rate
+      - cache_hit_rate
+      - avg_latency_ms
+      - cost_avoided
+      - previous
+      - series
+      - by_workload
+      - by_source
+      - by_model
+      title: Overview
+    Page_AuditOut_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AuditOut'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+          description: Pass as ?cursor= to fetch the next page
+      type: object
+      required:
+      - items
+      title: Page[AuditOut]
+    Page_RunOut_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/RunOut'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+          description: Pass as ?cursor= to fetch the next page
+      type: object
+      required:
+      - items
+      title: Page[RunOut]
+    PasswordChange:
+      properties:
+        current_password:
+          type: string
+          maxLength: 256
+          minLength: 1
+          title: Current Password
+        new_password:
+          type: string
+          maxLength: 256
+          minLength: 10
+          title: New Password
+      type: object
+      required:
+      - current_password
+      - new_password
+      title: PasswordChange
+    Point:
+      properties:
+        bucket:
+          type: string
+          format: date-time
+          title: Bucket
+        runs:
+          type: integer
+          title: Runs
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        tokens_saved:
+          type: integer
+          title: Tokens Saved
+      type: object
+      required:
+      - bucket
+      - runs
+      - tokens_before
+      - tokens_after
+      - tokens_saved
+      title: Point
+    ProfileIn:
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          title: Name
+        description:
+          type: string
+          maxLength: 300
+          title: Description
+          default: ''
+        weights:
+          $ref: '#/components/schemas/Weights'
+        relevance:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Relevance
+        recency:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Recency
+        importance:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Importance
+      type: object
+      required:
+      - name
+      - weights
+      - relevance
+      - recency
+      - importance
+      title: ProfileIn
+    ProfileOut:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        weights:
+          $ref: '#/components/schemas/Weights'
+        relevance:
+          type: number
+          title: Relevance
+        recency:
+          type: number
+          title: Recency
+        importance:
+          type: number
+          title: Importance
+        builtin:
+          type: boolean
+          title: Builtin
+          description: Ships with ContextForge
+        customized:
+          type: boolean
+          title: Customized
+          description: A built-in profile whose weights were edited
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        updated_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Updated At
+      type: object
+      required:
+      - name
+      - description
+      - weights
+      - relevance
+      - recency
+      - importance
+      - builtin
+      - customized
+      title: ProfileOut
+    RankRequest:
+      properties:
+        query:
+          type: string
+          maxLength: 20000
+          minLength: 1
+          title: Query
+        passages:
+          items:
+            $ref: '#/components/schemas/Document'
+          type: array
+          maxItems: 20000
+          minItems: 1
+          title: Passages
+        model:
+          type: string
+          maxLength: 200
+          title: Model
+          default: gpt-4o
+        top_k:
+          anyOf:
+          - type: integer
+            maximum: 20000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Top K
+        max_tokens:
+          anyOf:
+          - type: integer
+            maximum: 10000000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Tokens
+        deduplicate:
+          type: boolean
+          title: Deduplicate
+          default: true
+        allow_estimate:
+          type: boolean
+          title: Allow Estimate
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - query
+      - passages
+      title: RankRequest
+    RankResponse:
+      properties:
+        query:
+          type: string
+          title: Query
+        tokenizer:
+          $ref: '#/components/schemas/TokenizerInfo'
+        ranked:
+          items:
+            $ref: '#/components/schemas/RankedPassage'
+          type: array
+          title: Ranked
+        dropped:
+          items:
+            $ref: '#/components/schemas/RankedPassage'
+          type: array
+          title: Dropped
+          description: Duplicates, zero-relevance passages and those beyond top_k or max_tokens
+        tokens_selected:
+          type: integer
+          title: Tokens Selected
+      type: object
+      required:
+      - query
+      - tokenizer
+      - ranked
+      - dropped
+      - tokens_selected
+      title: RankResponse
+    RankedPassage:
+      properties:
+        id:
+          type: string
+          title: Id
+        rank:
+          type: integer
+          title: Rank
+        score:
+          type: number
+          title: Score
+          description: BM25 relevance blended with the retriever score, 0..1
+        relevance:
+          type: number
+          title: Relevance
+          description: BM25 relevance to the query, 0..1
+        tokens:
+          type: integer
+          title: Tokens
+        duplicate_of:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Duplicate Of
+        source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source
+      type: object
+      required:
+      - id
+      - rank
+      - score
+      - relevance
+      - tokens
+      title: RankedPassage
+    RunDetail:
+      properties:
+        id:
+          type: integer
+          title: Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        source:
+          type: string
+          title: Source
+        key_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Key Id
+        key_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Key Name
+        model:
+          type: string
+          title: Model
+        tokenizer:
+          type: string
+          title: Tokenizer
+        exact:
+          type: boolean
+          title: Exact
+        workload:
+          type: string
+          title: Workload
+        profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Profile
+        strategy:
+          type: string
+          title: Strategy
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        budget:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget
+        budget_met:
+          type: boolean
+          title: Budget Met
+        messages_in:
+          type: integer
+          title: Messages In
+        messages_out:
+          type: integer
+          title: Messages Out
+        documents_in:
+          type: integer
+          title: Documents In
+        documents_out:
+          type: integer
+          title: Documents Out
+        facts_total:
+          type: integer
+          title: Facts Total
+        facts_retained:
+          type: integer
+          title: Facts Retained
+        citations_preserved:
+          type: boolean
+          title: Citations Preserved
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        latency_ms:
+          type: number
+          title: Latency Ms
+        cache_hit:
+          type: boolean
+          title: Cache Hit
+        cost_avoided_usd:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cost Avoided Usd
+        upstream:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Upstream
+        upstream_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Upstream Model
+        upstream_status:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Upstream Status
+        upstream_cost_usd:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Upstream Cost Usd
+        summary_tokens:
+          type: integer
+          title: Summary Tokens
+        allocation:
+          items:
+            $ref: '#/components/schemas/Allocation'
+          type: array
+          title: Allocation
+        trace:
+          items:
+            $ref: '#/components/schemas/TraceStep'
+          type: array
+          title: Trace
+        has_content:
+          type: boolean
+          title: Has Content
+          description: Input and output stored (STORE_CONTENT=true)
+      type: object
+      required:
+      - id
+      - created_at
+      - request_id
+      - source
+      - key_id
+      - key_name
+      - model
+      - tokenizer
+      - exact
+      - workload
+      - profile
+      - strategy
+      - tokens_before
+      - tokens_after
+      - budget
+      - budget_met
+      - messages_in
+      - messages_out
+      - documents_in
+      - documents_out
+      - facts_total
+      - facts_retained
+      - citations_preserved
+      - warnings
+      - latency_ms
+      - cache_hit
+      - cost_avoided_usd
+      - upstream
+      - upstream_model
+      - upstream_status
+      - upstream_cost_usd
+      - summary_tokens
+      - allocation
+      - trace
+      - has_content
+      title: RunDetail
+    RunOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        source:
+          type: string
+          title: Source
+        key_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Key Id
+        key_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Key Name
+        model:
+          type: string
+          title: Model
+        tokenizer:
+          type: string
+          title: Tokenizer
+        exact:
+          type: boolean
+          title: Exact
+        workload:
+          type: string
+          title: Workload
+        profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Profile
+        strategy:
+          type: string
+          title: Strategy
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        budget:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget
+        budget_met:
+          type: boolean
+          title: Budget Met
+        messages_in:
+          type: integer
+          title: Messages In
+        messages_out:
+          type: integer
+          title: Messages Out
+        documents_in:
+          type: integer
+          title: Documents In
+        documents_out:
+          type: integer
+          title: Documents Out
+        facts_total:
+          type: integer
+          title: Facts Total
+        facts_retained:
+          type: integer
+          title: Facts Retained
+        citations_preserved:
+          type: boolean
+          title: Citations Preserved
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        latency_ms:
+          type: number
+          title: Latency Ms
+        cache_hit:
+          type: boolean
+          title: Cache Hit
+        cost_avoided_usd:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cost Avoided Usd
+        upstream:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Upstream
+        upstream_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Upstream Model
+        upstream_status:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Upstream Status
+        upstream_cost_usd:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Upstream Cost Usd
+        summary_tokens:
+          type: integer
+          title: Summary Tokens
+      type: object
+      required:
+      - id
+      - created_at
+      - request_id
+      - source
+      - key_id
+      - key_name
+      - model
+      - tokenizer
+      - exact
+      - workload
+      - profile
+      - strategy
+      - tokens_before
+      - tokens_after
+      - budget
+      - budget_met
+      - messages_in
+      - messages_out
+      - documents_in
+      - documents_out
+      - facts_total
+      - facts_retained
+      - citations_preserved
+      - warnings
+      - latency_ms
+      - cache_hit
+      - cost_avoided_usd
+      - upstream
+      - upstream_model
+      - upstream_status
+      - upstream_cost_usd
+      - summary_tokens
+      title: RunOut
+    Sample:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        workload:
+          type: string
+          title: Workload
+        description:
+          type: string
+          title: Description
+        tokens:
+          type: integer
+          title: Tokens
+        max_input_tokens:
+          type: integer
+          title: Max Input Tokens
+      type: object
+      required:
+      - id
+      - title
+      - workload
+      - description
+      - tokens
+      - max_input_tokens
+      title: Sample
+    SessionOut:
+      properties:
+        user:
+          $ref: '#/components/schemas/UserOut'
+        session_token:
+          type: string
+          title: Session Token
+          description: Bearer token for API clients; browsers use the cookie
+        expires_in_s:
+          type: integer
+          title: Expires In S
+      type: object
+      required:
+      - user
+      - session_token
+      - expires_in_s
+      title: SessionOut
+    Stats:
+      properties:
+        original_tokens:
+          type: integer
+          title: Original Tokens
+        optimized_tokens:
+          type: integer
+          title: Optimized Tokens
+        tokens_removed:
+          type: integer
+          title: Tokens Removed
+        reduction_percent:
+          type: number
+          title: Reduction Percent
+        budget:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Budget
+        budget_met:
+          type: boolean
+          title: Budget Met
+        messages_in:
+          type: integer
+          title: Messages In
+        messages_out:
+          type: integer
+          title: Messages Out
+        documents_in:
+          type: integer
+          title: Documents In
+        documents_out:
+          type: integer
+          title: Documents Out
+        facts_total:
+          type: integer
+          title: Facts Total
+          description: Critical facts detected in the input messages
+        facts_retained:
+          type: integer
+          title: Facts Retained
+        fact_retention:
+          type: number
+          title: Fact Retention
+          description: facts_retained / facts_total (1.0 when none)
+        latency_ms:
+          type: number
+          title: Latency Ms
+      type: object
+      required:
+      - original_tokens
+      - optimized_tokens
+      - tokens_removed
+      - reduction_percent
+      - budget
+      - budget_met
+      - messages_in
+      - messages_out
+      - documents_in
+      - documents_out
+      - facts_total
+      - facts_retained
+      - fact_retention
+      - latency_ms
+      title: Stats
+    SummarizeRequest:
+      properties:
+        model:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Model
+        messages:
+          items:
+            $ref: '#/components/schemas/Message'
+          type: array
+          maxItems: 20000
+          minItems: 1
+          title: Messages
+        max_summary_tokens:
+          type: integer
+          maximum: 20000.0
+          minimum: 32.0
+          title: Max Summary Tokens
+          default: 500
+        summarizer:
+          type: string
+          enum:
+          - extractive
+          - llm
+          title: Summarizer
+          default: extractive
+        query:
+          anyOf:
+          - type: string
+            maxLength: 20000
+          - type: 'null'
+          title: Query
+        include_system:
+          type: boolean
+          title: Include System
+          description: Summarise system messages too (they are excluded by default)
+          default: false
+        allow_estimate:
+          type: boolean
+          title: Allow Estimate
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - model
+      - messages
+      title: SummarizeRequest
+    SummarizeResponse:
+      properties:
+        summary:
+          type: string
+          title: Summary
+        sections:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Sections
+        summarizer:
+          type: string
+          title: Summarizer
+        tokens:
+          type: integer
+          title: Tokens
+        source_tokens:
+          type: integer
+          title: Source Tokens
+        facts_total:
+          type: integer
+          title: Facts Total
+        facts_covered:
+          type: integer
+          title: Facts Covered
+        tokenizer:
+          $ref: '#/components/schemas/TokenizerInfo'
+        warnings:
+          items:
+            $ref: '#/components/schemas/OptimizeWarning'
+          type: array
+          title: Warnings
+      type: object
+      required:
+      - summary
+      - sections
+      - summarizer
+      - tokens
+      - source_tokens
+      - facts_total
+      - facts_covered
+      - tokenizer
+      - warnings
+      title: SummarizeResponse
+    SystemInfo:
+      properties:
+        version:
+          type: string
+          title: Version
+        environment:
+          type: string
+          title: Environment
+        cloud:
+          type: string
+          title: Cloud
+        key_mode:
+          type: string
+          title: Key Mode
+        storage:
+          type: string
+          title: Storage
+        cache_backend:
+          type: string
+          title: Cache Backend
+        auth_required:
+          type: boolean
+          title: Auth Required
+        store_content:
+          type: boolean
+          title: Store Content
+        llm_summarizer:
+          type: boolean
+          title: Llm Summarizer
+        tokenizers:
+          items:
+            type: string
+          type: array
+          title: Tokenizers
+        tokenizer_aliases:
+          additionalProperties:
+            type: string
+          type: object
+          title: Tokenizer Aliases
+        builtin_profiles:
+          items:
+            type: string
+          type: array
+          title: Builtin Profiles
+        upstreams:
+          type: integer
+          title: Upstreams
+        active_keys:
+          type: integer
+          title: Active Keys
+        checks:
+          additionalProperties: true
+          type: object
+          title: Checks
+      type: object
+      required:
+      - version
+      - environment
+      - cloud
+      - key_mode
+      - storage
+      - cache_backend
+      - auth_required
+      - store_content
+      - llm_summarizer
+      - tokenizers
+      - tokenizer_aliases
+      - builtin_profiles
+      - upstreams
+      - active_keys
+      - checks
+      title: SystemInfo
+    TokenizerInfo:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: Tokenizer used, e.g. o200k_base or estimate:o200k_base*1.15
+        exact:
+          type: boolean
+          title: Exact
+          description: True when counts come from the model's own tokenizer
+        model:
+          type: string
+          title: Model
+      type: object
+      required:
+      - id
+      - exact
+      - model
+      title: TokenizerInfo
+    ToolCall:
+      properties:
+        id:
+          type: string
+          title: Id
+        type:
+          type: string
+          title: Type
+          default: function
+        function:
+          $ref: '#/components/schemas/ToolCallFunction'
+      additionalProperties: true
+      type: object
+      required:
+      - id
+      - function
+      title: ToolCall
+    ToolCallFunction:
+      properties:
+        name:
+          type: string
+          title: Name
+        arguments:
+          type: string
+          title: Arguments
+          default: ''
+      type: object
+      required:
+      - name
+      title: ToolCallFunction
+    TraceStep:
+      properties:
+        stage:
+          type: string
+          title: Stage
+        tokens_before:
+          type: integer
+          title: Tokens Before
+        tokens_after:
+          type: integer
+          title: Tokens After
+        items_removed:
+          type: integer
+          title: Items Removed
+          default: 0
+        ms:
+          type: number
+          title: Ms
+          default: 0.0
+        notes:
+          items:
+            type: string
+          type: array
+          title: Notes
+      type: object
+      required:
+      - stage
+      - tokens_before
+      - tokens_after
+      title: TraceStep
+    UpstreamIn:
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+          title: Name
+        kind:
+          type: string
+          enum:
+          - openai
+          - tokenshield
+          - smartrouter
+          title: Kind
+          default: openai
+        base_url:
+          type: string
+          maxLength: 500
+          title: Base Url
+          description: OpenAI-compatible base, e.g. https://host/v1
+        api_key:
+          anyOf:
+          - type: string
+            maxLength: 4000
+          - type: 'null'
+          title: Api Key
+          description: Write-only; sealed at rest
+        max_input_tokens:
+          anyOf:
+          - type: integer
+            maximum: 10000000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Input Tokens
+        strategy:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Strategy
+          default: balanced
+        enabled:
+          type: boolean
+          title: Enabled
+          default: true
+      type: object
+      required:
+      - name
+      - base_url
+      title: UpstreamIn
+    UpstreamOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        kind:
+          type: string
+          title: Kind
+        base_url:
+          type: string
+          title: Base Url
+        has_api_key:
+          type: boolean
+          title: Has Api Key
+        key_hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Key Hint
+        max_input_tokens:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Input Tokens
+        strategy:
+          type: string
+          title: Strategy
+        enabled:
+          type: boolean
+          title: Enabled
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - kind
+      - base_url
+      - has_api_key
+      - key_hint
+      - max_input_tokens
+      - strategy
+      - enabled
+      - created_at
+      title: UpstreamOut
+    UpstreamUpdate:
+      properties:
+        kind:
+          anyOf:
+          - type: string
+            enum:
+            - openai
+            - tokenshield
+            - smartrouter
+          - type: 'null'
+          title: Kind
+        base_url:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Base Url
+        api_key:
+          anyOf:
+          - type: string
+            maxLength: 4000
+          - type: 'null'
+          title: Api Key
+        clear_api_key:
+          type: boolean
+          title: Clear Api Key
+          default: false
+        max_input_tokens:
+          anyOf:
+          - type: integer
+            maximum: 10000000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Input Tokens
+        strategy:
+          anyOf:
+          - type: string
+            enum:
+            - conservative
+            - balanced
+            - aggressive
+          - type: 'null'
+          title: Strategy
+        enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enabled
+      type: object
+      title: UpstreamUpdate
+    UserCreate:
+      properties:
+        email:
+          type: string
+          maxLength: 320
+          pattern: ^[^@\s]+@[^@\s]+\.[^@\s]+$
+          title: Email
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        role:
+          type: string
+          enum:
+          - owner
+          - admin
+          - viewer
+          title: Role
+          default: viewer
+        password:
+          type: string
+          maxLength: 256
+          minLength: 10
+          title: Password
+      type: object
+      required:
+      - email
+      - name
+      - password
+      title: UserCreate
+    UserOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        email:
+          type: string
+          title: Email
+        name:
+          type: string
+          title: Name
+        role:
+          type: string
+          title: Role
+        disabled:
+          type: boolean
+          title: Disabled
+        last_login_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Login At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - email
+      - name
+      - role
+      - disabled
+      - last_login_at
+      - created_at
+      title: UserOut
+    UserUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Name
+        role:
+          anyOf:
+          - type: string
+            enum:
+            - owner
+            - admin
+            - viewer
+          - type: 'null'
+          title: Role
+        disabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Disabled
+      type: object
+      title: UserUpdate
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    Weights:
+      properties:
+        history:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: History
+        tool:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Tool
+        documents:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Documents
+        summary:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Summary
+      type: object
+      required:
+      - history
+      - tool
+      - documents
+      - summary
+      title: Weights
+servers:
+- url: http://localhost:4330
+  description: Local (make up)

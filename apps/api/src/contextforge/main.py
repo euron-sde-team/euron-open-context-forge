@@ -68,6 +68,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         docs_url="/docs",
         redoc_url=None,
         openapi_url="/openapi.json",
+        separate_input_output_schemas=False,
     )
     install_error_handlers(app)
     for router in (

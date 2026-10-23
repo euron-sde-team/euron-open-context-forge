@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 from pydantic import Field
 
 from contextforge.core.schemas import ApiModel, Usd
+from contextforge.engine.types import Allocation, TraceStep
 
 
 class RunOut(ApiModel):
@@ -45,8 +45,8 @@ class RunOut(ApiModel):
 
 
 class RunDetail(RunOut):
-    allocation: list[dict[str, Any]]
-    trace: list[dict[str, Any]]
+    allocation: list[Allocation]
+    trace: list[TraceStep]
     has_content: bool = Field(description="Input and output stored (STORE_CONTENT=true)")
 
 

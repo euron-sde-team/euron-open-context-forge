@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 from pydantic import Field
 
+from contextforge.benchmarks.runner import CaseResult, MethodSummary
 from contextforge.core.schemas import ApiModel
 
 
@@ -19,14 +19,14 @@ class BenchmarkRunOut(ApiModel):
     dataset_version: str
     cases: int
     runs_per_case: int
-    summary: list[dict[str, Any]]
+    summary: list[MethodSummary]
     error: str | None
     created_at: datetime
     finished_at: datetime | None
 
 
 class BenchmarkRunDetail(BenchmarkRunOut):
-    results: list[dict[str, Any]]
+    results: list[CaseResult]
 
 
 class DatasetCase(ApiModel):

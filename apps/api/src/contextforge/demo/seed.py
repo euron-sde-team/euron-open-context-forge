@@ -2,7 +2,7 @@
 
 * **Configuration** (users, service keys, upstreams, a custom profile) is created through
   the same services the dashboard uses.
-* **History**: 30 days of runs. Every historical row is a replay of a *real* engine result:
+* **History**: 60 days of runs. Every historical row is a replay of a *real* engine result:
   the committed benchmark samples are optimized at several budgets, strategies and models,
   and each row copies one of those results (tokens, facts, warnings, trace, allocation);
   only the timestamp, key and source vary. Nothing on the dashboard is an invented number.
@@ -351,7 +351,7 @@ async def _traffic(api_url: str, created: Created, n: int) -> dict[str, int]:
     return stats
 
 
-async def run(days: int = 30, traffic: int = 40, api_url: str = "http://localhost:4330") -> None:
+async def run(days: int = 60, traffic: int = 40, api_url: str = "http://localhost:4330") -> None:
     settings = get_settings()
     password = (
         os.environ.get("DEMO_PASSWORD") or os.environ.get("CF_DEMO_PASSWORD") or "ForgeDemo2026"

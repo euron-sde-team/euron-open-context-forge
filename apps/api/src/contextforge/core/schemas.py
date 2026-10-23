@@ -52,6 +52,6 @@ def decode_cursor(cursor: str | None) -> str | None:
         return None
 
 
-class Message(ApiModel):
+class Ack(ApiModel):
     ok: bool = True
     message: str = ""
