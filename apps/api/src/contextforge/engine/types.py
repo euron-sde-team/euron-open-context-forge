@@ -10,7 +10,15 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 Role = Literal["system", "developer", "user", "assistant", "tool"]
 Strategy = Literal["conservative", "balanced", "aggressive"]
@@ -51,6 +59,19 @@ class Message(_Model):
     name: str | None = None
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_unset(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Serialize like the chat API: optional fields only when present.
+
+        ``content`` is always kept (null is meaningful on an assistant tool-call message),
+        so an optimized message list can be forwarded to a provider unchanged.
+        """
+        data: dict[str, Any] = handler(self)
+        for key in ("name", "tool_calls", "tool_call_id"):
+            if data.get(key) is None:
+                data.pop(key, None)
+        return data
 
     def text(self) -> str:
         """The message's text, or an empty string for non-text content."""
