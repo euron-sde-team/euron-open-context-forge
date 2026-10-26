@@ -1,0 +1,20 @@
+# Copy to terraform.tfvars (git-ignored) and replace every placeholder.
+region      = "us-east-1"
+name_prefix = "acme-contextforge-dev" # the payloads bucket name derives from this: make it globally unique
+
+hostname        = "contextforge-dev.example.com"
+certificate_arn = "<ACM_CERTIFICATE_ARN>"     # same region, covering hostname
+route53_zone_id = "<ROUTE53_HOSTED_ZONE_ID>" # or remove and CNAME hostname to load_balancer_dns_name
+
+# The image tag pushed to the ecr_repositories output (git commit or release).
+image_tag = "0.1.0"
+
+# alarm_email                = "oncall@example.com"
+# budget_missed_threshold = 50
+# metrics_allowed_cidrs      = ["203.0.113.10/32"] # your Prometheus egress address
+# store_content              = false
+
+# Extra non-secret API settings (see docs/guides/configuration.md).
+# api_extra_environment = {
+#   STORE_CONTENT = "false"
+# }
