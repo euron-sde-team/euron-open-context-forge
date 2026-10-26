@@ -166,7 +166,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign out */
+        /**
+         * Sign out
+         * @description Ends this session server-side too: the token is refused until it expires.
+         */
         post: operations["logout_api_v1_auth_logout_post"];
         delete?: never;
         options?: never;
@@ -408,7 +411,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stored input and output (STORE_CONTENT only) */
+        /** Stored input and output (STORE_CONTENT only, admins) */
         get: operations["run_content_api_v1_runs__run_id__content_get"];
         put?: never;
         post?: never;
@@ -738,6 +741,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Started At */
+            started_at?: string | null;
             /** Finished At */
             finished_at: string | null;
             /** Results */
@@ -776,6 +781,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Started At */
+            started_at?: string | null;
             /** Finished At */
             finished_at: string | null;
         };

@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { DollarSignIcon } from "lucide-react";
+import { GaugeIcon } from "lucide-react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AllocationView, TraceView, WarningsView } from "@/components/engine-views";
@@ -13,25 +13,25 @@ import { TokenBar } from "@/components/token-bar";
 afterEach(cleanup);
 
 describe("KpiTile", () => {
-  it("shows the value and marks rising spend as bad", () => {
-    render(<KpiTile label="Spend" icon={DollarSignIcon} value="$135.03" current={135} previous={100} goodWhen="down" comparison="vs prior 30d" />);
-    expect(screen.getByText("$135.03")).toBeInTheDocument();
+  it("shows the value and marks more missed budgets as bad", () => {
+    render(<KpiTile label="Budgets missed" icon={GaugeIcon} value="135" current={135} previous={100} goodWhen="down" comparison="vs prior 30d" />);
+    expect(screen.getByText("135")).toBeInTheDocument();
     const chip = screen.getByText("+35%");
     expect(chip.className).toMatch(/warning/);
   });
 
-  it("marks a rising cache hit rate as good", () => {
-    render(<KpiTile label="Cache hit rate" icon={DollarSignIcon} value="27.1%" current={27.1} previous={24.2} goodWhen="up" comparison="vs prior 30d" />);
+  it("marks rising tokens saved as good", () => {
+    render(<KpiTile label="Tokens saved" icon={GaugeIcon} value="27.1%" current={27.1} previous={24.2} goodWhen="up" comparison="vs prior 30d" />);
     expect(screen.getByText("+12%").className).toMatch(/savings/);
   });
 
   it("says New when there is no previous period", () => {
-    render(<KpiTile label="Requests" icon={DollarSignIcon} value="12" current={12} previous={0} comparison="vs prior 30d" />);
+    render(<KpiTile label="Runs" icon={GaugeIcon} value="12" current={12} previous={0} comparison="vs prior 30d" />);
     expect(screen.getByText("New")).toBeInTheDocument();
   });
 
   it("renders skeletons while loading", () => {
-    const { container } = render(<KpiTile label="Spend" icon={DollarSignIcon} value="$1" current={1} previous={1} comparison="x" loading />);
+    const { container } = render(<KpiTile label="Fact retention" icon={GaugeIcon} value="$1" current={1} previous={1} comparison="x" loading />);
     expect(screen.queryByText("$1")).not.toBeInTheDocument();
     expect(container.querySelectorAll("[data-slot='skeleton'], .animate-pulse").length).toBeGreaterThan(0);
   });
@@ -39,10 +39,17 @@ describe("KpiTile", () => {
 
 describe("EmptyState", () => {
   it("always explains itself and offers an action", () => {
-    render(<EmptyState icon={DollarSignIcon} title="No budgets yet" description="Budgets stop spend before it happens." action={<button type="button">New budget</button>} />);
-    expect(screen.getByText("No budgets yet")).toBeInTheDocument();
-    expect(screen.getByText(/stop spend/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "New budget" })).toBeInTheDocument();
+    render(
+      <EmptyState
+        icon={GaugeIcon}
+        title="No runs yet"
+        description="Runs appear here as soon as an application calls /v1/context/optimize."
+        action={<button type="button">Open the playground</button>}
+      />,
+    );
+    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+    expect(screen.getByText(/as soon as an application calls/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open the playground" })).toBeInTheDocument();
   });
 });
 

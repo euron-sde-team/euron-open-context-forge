@@ -179,12 +179,12 @@ export function LoginScreen() {
             </div>
             <div className="mt-3 font-mono text-[12px] leading-relaxed text-white/80">
               58,881 tokens <span className="text-white/45">to</span>{" "}
-              <span className="text-[var(--panel-accent)]">4,264 tokens</span>: 14 repeated test runs collapsed, the
+              <span className="text-[var(--panel-accent)]">2,951 tokens</span>: 14 repeated test runs collapsed, the
               latest file read kept whole, the goal and root cause kept verbatim.
             </div>
             <div className="mt-3 flex items-center gap-4 text-[11.5px] text-white/50">
               <span>Facts retained: 7 of 7</span>
-              <span>Reduction: 92.8%</span>
+              <span>Reduction: 95%</span>
               <span>Model calls: 0</span>
             </div>
           </div>

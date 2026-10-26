@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Meta tags cannot read CSS variables: these mirror --background in globals.css.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f5f6f9" },
     { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },

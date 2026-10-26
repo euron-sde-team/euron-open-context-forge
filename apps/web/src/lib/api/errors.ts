@@ -106,6 +106,12 @@ function fallbackMessage(status: number): string {
   return `Request failed (HTTP ${status}).`;
 }
 
+/**
+ * 401s that answer a sign-in or password form: the person is told exactly why (wrong
+ * password, locked, disabled) instead of "your session expired".
+ */
+export const SIGN_IN_ERRORS: ReadonlySet<string> = new Set(["invalid_credentials", "account_locked", "account_disabled"]);
+
 /** The message to show a person for any thrown value, always actionable. */
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -113,7 +119,7 @@ export function errorMessage(err: unknown): string {
       const lines = validationMessages(err.details);
       if (lines.length) return lines.join(". ");
     }
-    if (err.status === 401 && err.code !== "invalid_credentials") return fallbackMessage(401);
+    if (err.status === 401 && !SIGN_IN_ERRORS.has(err.code)) return fallbackMessage(401);
     return err.message || fallbackMessage(err.status);
   }
   if (err instanceof TypeError) return fallbackMessage(0);

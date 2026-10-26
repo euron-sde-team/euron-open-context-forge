@@ -86,6 +86,10 @@
   --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-code-bg: var(--code-bg);
+  --color-code-fg: var(--code-fg);
+  --color-code-muted: var(--code-muted);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-neutral-soft: var(--neutral-soft);
@@ -140,6 +144,11 @@
   --warning-soft: #fdf1dc;
   --danger: #be123c;
   --danger-soft: #fde7ec;
+  --danger-foreground: #ffffff;
+  /* Code samples are a dark slab in both themes. */
+  --code-bg: #0d1017;
+  --code-fg: #d7dbe6;
+  --code-muted: #8b93a7;
   --info: #0369a1;
   --info-soft: #e1f1fb;
   --neutral-soft: #eceef3;
@@ -191,6 +200,7 @@
   --warning-soft: #2e2410;
   --danger: #fb7185;
   --danger-soft: #34151d;
+  --danger-foreground: #1a0a0e;
   --info: #38bdf8;
   --info-soft: #0f2533;
   --neutral-soft: #1f2330;

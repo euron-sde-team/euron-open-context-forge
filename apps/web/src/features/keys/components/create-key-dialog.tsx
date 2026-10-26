@@ -14,10 +14,10 @@ import { SimpleSelect } from "@/components/ui/select";
 import { useProfiles } from "@/features/profiles/api";
 import { useUpstreams } from "@/features/upstreams/api";
 import { errorMessage } from "@/lib/api/errors";
-import type { ApiKeyCreated } from "@/lib/api/types";
+import type { ApiKey, ApiKeyCreated } from "@/lib/api/types";
 import { proxySnippet, restSnippet } from "@/lib/snippets";
 
-import { useCreateKey } from "../api";
+import { useCreateKey, useUpdateKey } from "../api";
 
 export function KeyRevealed({ created }: { created: ApiKeyCreated }) {
   const [origin, setOrigin] = React.useState("");
@@ -48,29 +48,49 @@ export function KeyRevealed({ created }: { created: ApiKeyCreated }) {
 
 const NONE = "__none__";
 
-export function CreateKeyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+/** "2026-12-31" -> the end of that day in UTC, so a key works through its last day. */
+export function expiryFromDate(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(`${value}T23:59:59Z`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Creates a key, or edits one when `editing` is set (the secret is never shown again). */
+export function CreateKeyDialog({
+  open,
+  onOpenChange,
+  editing = null,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  editing?: ApiKey | null;
+}) {
   const create = useCreateKey();
+  const update = useUpdateKey();
+  const pending = create.isPending || update.isPending;
   const profiles = useProfiles();
   const upstreams = useUpstreams();
   const [name, setName] = React.useState("");
   const [rpm, setRpm] = React.useState("");
   const [profile, setProfile] = React.useState(NONE);
   const [upstream, setUpstream] = React.useState(NONE);
+  const [expires, setExpires] = React.useState("");
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [created, setCreated] = React.useState<ApiKeyCreated | null>(null);
 
   React.useEffect(() => {
     if (open) {
-      setName("");
-      setRpm("");
-      setProfile(NONE);
-      setUpstream(NONE);
+      setName(editing?.name ?? "");
+      setRpm(editing?.rpm_limit ? String(editing.rpm_limit) : "");
+      setProfile(editing?.default_profile ?? NONE);
+      setUpstream(editing?.default_upstream ?? NONE);
+      setExpires(editing?.expires_at ? editing.expires_at.slice(0, 10) : "");
       setErrors({});
       setServerError(null);
       setCreated(null);
     }
-  }, [open]);
+  }, [open, editing]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,38 +98,56 @@ export function CreateKeyDialog({ open, onOpenChange }: { open: boolean; onOpenC
     if (!name.trim()) errs.name = 'Name it after the app that uses it, for example "support-bot".';
     const n = rpm.trim() ? Number(rpm) : null;
     if (n != null && (!Number.isInteger(n) || n < 1)) errs.rpm = "Whole number above 0, or empty for the service default.";
+    const expiresAt = expiryFromDate(expires);
+    if (expires && (!expiresAt || new Date(expiresAt) <= new Date())) errs.expires = "Pick a date from today on, or leave it empty for no expiry.";
     setErrors(errs);
     if (Object.keys(errs).length) return;
     setServerError(null);
-    create.mutate(
-      {
-        name: name.trim(),
-        rpm_limit: n,
-        default_profile: profile === NONE ? null : profile,
-        default_upstream: upstream === NONE ? null : upstream,
-      },
-      {
-        onSuccess: (k) => {
-          setCreated(k);
-          toast.success("Service key created.");
+    const body = {
+      name: name.trim(),
+      rpm_limit: n,
+      default_profile: profile === NONE ? null : profile,
+      default_upstream: upstream === NONE ? null : upstream,
+      expires_at: expiresAt,
+    };
+    if (editing) {
+      update.mutate(
+        { id: editing.id, body },
+        {
+          onSuccess: () => {
+            toast.success(`Key "${body.name}" updated.`);
+            onOpenChange(false);
+          },
+          onError: (err) => setServerError(errorMessage(err)),
         },
-        onError: (err) => setServerError(errorMessage(err)),
+      );
+      return;
+    }
+    create.mutate(body, {
+      onSuccess: (k) => {
+        setCreated(k);
+        toast.success("Service key created.");
       },
-    );
+      onError: (err) => setServerError(errorMessage(err)),
+    });
   }
 
+  const optionsFailed = profiles.isError || upstreams.isError;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !create.isPending && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
       <DialogContent className={created ? "max-w-2xl" : "max-w-lg"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {created && <CheckCircle2Icon className="size-5 text-savings" />}
-            {created ? `Key "${created.name}" is ready` : "New service key"}
+            {created ? `Key "${created.name}" is ready` : editing ? `Edit "${editing.name}"` : "New service key"}
           </DialogTitle>
           <DialogDescription>
             {created
               ? "Use it as a Bearer token. Revoke it any time from API keys."
-              : "Applications use this key to call /v1/context and the OpenAI-compatible proxy."}
+              : editing
+                ? "Changes apply to the next request made with this key. The key itself stays the same."
+                : "Applications use this key to call /v1/context and the OpenAI-compatible proxy."}
           </DialogDescription>
         </DialogHeader>
         {created ? (
@@ -127,9 +165,14 @@ export function CreateKeyDialog({ open, onOpenChange }: { open: boolean; onOpenC
               <Field label="Name" htmlFor="key-name" error={errors.name}>
                 <Input id="key-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="support-bot" />
               </Field>
-              <Field label="Requests per minute" htmlFor="key-rpm" error={errors.rpm} hint="Over the limit, calls get HTTP 429 with Retry-After.">
-                <Input id="key-rpm" inputMode="numeric" className="tabular" placeholder="Service default" value={rpm} onChange={(e) => setRpm(e.target.value)} />
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Requests per minute" htmlFor="key-rpm" error={errors.rpm} hint="Over it, calls get 429">
+                  <Input id="key-rpm" inputMode="numeric" className="tabular" placeholder="Service default" value={rpm} onChange={(e) => setRpm(e.target.value)} />
+                </Field>
+                <Field label="Expires" htmlFor="key-expires" error={errors.expires} hint="Empty: never">
+                  <Input id="key-expires" type="date" className="tabular" value={expires} onChange={(e) => setExpires(e.target.value)} />
+                </Field>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Default profile" htmlFor="key-profile" hint="Used when a request names none">
                   <SimpleSelect
@@ -148,14 +191,29 @@ export function CreateKeyDialog({ open, onOpenChange }: { open: boolean; onOpenC
                   />
                 </Field>
               </div>
+              {optionsFailed && (
+                <p className="text-[12.5px] text-muted-foreground">
+                  Could not load the profile or upstream list.{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    onClick={() => {
+                      void profiles.refetch();
+                      void upstreams.refetch();
+                    }}
+                  >
+                    Retry
+                  </button>
+                </p>
+              )}
               {serverError && <FieldError>{serverError}</FieldError>}
             </DialogBody>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? "Creating..." : "Create key"}
+              <Button type="submit" disabled={pending}>
+                {editing ? (pending ? "Saving..." : "Save changes") : pending ? "Creating..." : "Create key"}
               </Button>
             </DialogFooter>
           </form>

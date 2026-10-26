@@ -6,8 +6,8 @@ const ROLE_LABEL: Record<Role, string> = { owner: "Owner", admin: "Admin", viewe
 
 const ROLE_DESCRIPTION: Record<Role, string> = {
   owner: "Full control, including users and roles.",
-  admin: "Manages projects, keys, budgets, policies and models.",
-  viewer: "Read only: sees spend, requests and settings.",
+  admin: "Manages profiles, keys, upstreams and benchmarks.",
+  viewer: "Read only: sees runs, savings, jobs and settings.",
 };
 
 export function isRole(value: unknown): value is Role {

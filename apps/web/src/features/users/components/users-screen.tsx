@@ -1,9 +1,10 @@
 "use client";
 
-import { UserPlusIcon, UsersIcon } from "lucide-react";
+import { PencilIcon, UserPlusIcon, UsersIcon } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { AdminOnly } from "@/components/admin-only";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
@@ -20,7 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { usePermissions } from "@/features/auth/api";
 import { MIN_PASSWORD } from "@/features/auth/components/change-password-dialog";
 import { errorMessage } from "@/lib/api/errors";
-import type { Role } from "@/lib/api/types";
+import type { Role, User } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { formatRelative, initials } from "@/lib/format";
 import { ROLES, roleDescription, roleLabel } from "@/lib/roles";
@@ -102,11 +103,67 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
   );
 }
 
-export function UsersScreen() {
-  const q = useUsers();
+function RenameDialog({ user, onOpenChange }: { user: User | null; onOpenChange: (o: boolean) => void }) {
   const update = useUpdateUser();
-  const { user: me, canManageUsers } = usePermissions();
+  const [name, setName] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (user) {
+      setName(user.name);
+      setError(null);
+    }
+  }, [user]);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+    const value = name.trim();
+    if (!value) return setError("Enter the name people see in the dashboard and the audit log.");
+    update.mutate(
+      { id: user.id, body: { name: value } },
+      {
+        onSuccess: () => {
+          toast.success(`Renamed to ${value}.`);
+          onOpenChange(false);
+        },
+        onError: (err) => setError(errorMessage(err)),
+      },
+    );
+  }
+
+  return (
+    <Dialog open={user != null} onOpenChange={(o) => !update.isPending && onOpenChange(o)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename {user?.name}</DialogTitle>
+          <DialogDescription>The display name only; the email used to sign in stays the same.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="flex min-h-0 flex-col" noValidate>
+          <DialogBody>
+            <Field label="Name" htmlFor="rename-name" error={error ?? undefined}>
+              <Input id="rename-name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={update.isPending}>
+              {update.isPending ? "Saving..." : "Save name"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function UsersScreen() {
+  const { user: me, canWrite, canManageUsers } = usePermissions();
+  const q = useUsers(canWrite);
+  const update = useUpdateUser();
   const [open, setOpen] = React.useState(false);
+  const [renaming, setRenaming] = React.useState<User | null>(null);
 
   function change(id: string, body: { role?: Role; disabled?: boolean }, msg: string) {
     update.mutate({ id, body }, { onSuccess: () => toast.success(msg), onError: (e) => toast.error(errorMessage(e)) });
@@ -126,6 +183,9 @@ export function UsersScreen() {
           )
         }
       />
+      {me && !canWrite ? (
+        <AdminOnly what="The user list" />
+      ) : (
       <Surface className="overflow-hidden">
         {q.isPending ? (
           <div className="pt-3">
@@ -157,6 +217,11 @@ export function UsersScreen() {
                           <div className="flex items-center gap-1.5 font-medium">
                             <span className="truncate">{u.name}</span>
                             {self && <Chip tone="primary">You</Chip>}
+                            {canManageUsers && (
+                              <Button variant="subtle" size="icon-xs" aria-label={`Rename ${u.name}`} onClick={() => setRenaming(u)}>
+                                <PencilIcon />
+                              </Button>
+                            )}
                           </div>
                           <div className="truncate text-[12px] text-muted-foreground">{u.email}</div>
                         </div>
@@ -200,8 +265,10 @@ export function UsersScreen() {
           </Table>
         )}
       </Surface>
+      )}
       {!canManageUsers && <p className="mt-3 text-xs text-muted-foreground">Only owners can add users or change roles.</p>}
       <InviteDialog open={open} onOpenChange={setOpen} />
+      <RenameDialog user={renaming} onOpenChange={(o) => !o && setRenaming(null)} />
     </>
   );
 }

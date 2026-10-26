@@ -12,8 +12,8 @@ import { Hint } from "./hint";
 
 /**
  * Headline number with its change versus the previous period. `goodWhen` says which
- * direction is good news, so a drop in spend reads green and a rise in rejections
- * reads amber.
+ * direction is good news, so a rise in tokens saved reads green and a rise in missed
+ * budgets reads amber.
  */
 export function KpiTile({
   label,

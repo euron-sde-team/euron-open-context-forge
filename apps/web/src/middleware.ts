@@ -20,5 +20,5 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   // Everything except the proxied API surfaces, Next internals and static files.
-  matcher: ["/((?!api/|v1/|healthz|readyz|_next/|favicon|icon|.*\\.(?:svg|png|jpg|ico|webp|txt)$).*)"],
+  matcher: ["/((?!api/|v1/|health|readyz|docs|openapi\\.json|_next/|favicon|icon|.*\\.(?:svg|png|jpg|ico|webp|txt)$).*)"],
 };

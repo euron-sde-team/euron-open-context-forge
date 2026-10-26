@@ -6,8 +6,8 @@ import { api, unwrap } from "@/lib/api/client";
 import type { User, UserCreate, UserUpdate } from "@/lib/api/types";
 import { qk, STALE } from "@/lib/query-keys";
 
-export function useUsers() {
-  return useQuery({ queryKey: qk.users, queryFn: () => unwrap(api.GET("/api/v1/users")), staleTime: STALE.config });
+export function useUsers(enabled = true) {
+  return useQuery({ queryKey: qk.users, queryFn: () => unwrap(api.GET("/api/v1/users")), staleTime: STALE.config, enabled });
 }
 
 export function useCreateUser() {

@@ -27,24 +27,6 @@ export function formatUsd(value: number | null | undefined): string {
   return `${sign}$${text}`;
 }
 
-/** Compact money for tiles and axes: $12.3K, $1.2M, but full precision below $10K. */
-export function formatUsdCompact(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "n/a";
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `${value < 0 ? "-" : ""}$${trim(abs / 1_000_000)}M`;
-  if (abs >= 10_000) return `${value < 0 ? "-" : ""}$${trim(abs / 1_000)}K`;
-  return formatUsd(value);
-}
-
-/** Axis ticks: short, no more than two decimals. */
-export function formatUsdAxis(value: number): string {
-  const abs = Math.abs(value);
-  if (abs === 0) return "$0";
-  if (abs >= 1000) return formatUsdCompact(value);
-  if (abs >= 1) return `$${trim(abs)}`;
-  return `$${abs.toFixed(abs >= 0.1 ? 2 : abs >= 0.01 ? 3 : 4).replace(/0+$/, "")}`;
-}
-
 function trim(n: number): string {
   const fixed = n >= 100 ? n.toFixed(0) : n.toFixed(1);
   return fixed.replace(/\.0$/, "");
@@ -89,14 +71,6 @@ export function formatLatency(ms: number | null | undefined): string {
 }
 
 /** Seconds as a short duration: 45 s, 15 min, 1 h, 24 h, 7 d. */
-export function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds)) return "n/a";
-  if (seconds < 60) return `${seconds} s`;
-  if (seconds < 3600) return `${trim(seconds / 60)} min`;
-  if (seconds < 86_400 * 2) return `${trim(seconds / 3600)} h`;
-  return `${trim(seconds / 86_400)} d`;
-}
-
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null || !Number.isFinite(bytes)) return "n/a";
   if (bytes < 1024) return `${bytes} B`;
@@ -137,13 +111,6 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
-const timeFmt = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
@@ -154,12 +121,6 @@ export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "n/a" : dateFmt.format(d);
-}
-
-export function formatTime(iso: string | null | undefined): string {
-  if (!iso) return "n/a";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "n/a" : timeFmt.format(d);
 }
 
 /** "just now", "5m ago", "3h ago", "2d ago", then a date. */

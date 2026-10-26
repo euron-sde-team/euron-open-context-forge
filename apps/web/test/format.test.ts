@@ -4,15 +4,12 @@ import {
   computeDelta,
   formatBytes,
   formatDelta,
-  formatDuration,
   formatLatency,
   formatNumber,
   formatPercent,
   formatRatio,
   formatTokens,
   formatUsd,
-  formatUsdAxis,
-  formatUsdCompact,
 } from "@/lib/format";
 
 describe("formatUsd", () => {
@@ -33,21 +30,7 @@ describe("formatUsd", () => {
   });
 });
 
-describe("compact and axis money", () => {
-  it("compacts large amounts only", () => {
-    expect(formatUsdCompact(12_345)).toBe("$12.3K");
-    expect(formatUsdCompact(2_500_000)).toBe("$2.5M");
-    expect(formatUsdCompact(950)).toBe("$950.00");
-  });
-  it("keeps axis ticks short", () => {
-    expect(formatUsdAxis(0)).toBe("$0");
-    expect(formatUsdAxis(8)).toBe("$8");
-    expect(formatUsdAxis(0.45)).toBe("$0.45");
-    expect(formatUsdAxis(1500)).toBe("$1,500.00");
-  });
-});
-
-describe("counts, ratios and durations", () => {
+describe("counts, ratios, latency and bytes", () => {
   it("abbreviates tokens", () => {
     expect(formatTokens(845)).toBe("845");
     expect(formatTokens(12_400)).toBe("12.4K");
@@ -60,12 +43,9 @@ describe("counts, ratios and durations", () => {
     expect(formatPercent(60)).toBe("60%");
     expect(formatPercent(60.44)).toBe("60.4%");
   });
-  it("formats latency, durations and bytes", () => {
+  it("formats latency and bytes", () => {
     expect(formatLatency(610.4)).toBe("610 ms");
     expect(formatLatency(1240)).toBe("1.24 s");
-    expect(formatDuration(45)).toBe("45 s");
-    expect(formatDuration(900)).toBe("15 min");
-    expect(formatDuration(86_400 * 7)).toBe("7 d");
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2 KB");
   });

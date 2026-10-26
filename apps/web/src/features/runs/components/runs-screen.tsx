@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { CodeBlock } from "@/components/code-block";
 import { AllocationView, TraceView, WarningCodes } from "@/components/engine-views";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -21,11 +22,13 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTit
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePermissions } from "@/features/auth/api";
+import { ApiError } from "@/lib/api/errors";
 import type { Run } from "@/lib/api/types";
 import { retentionTone, SOURCES, WORKLOADS, workloadLabel } from "@/lib/chips";
 import { formatDateTime, formatLatency, formatNumber, formatPercent, formatRelative, formatUsd } from "@/lib/format";
 
-import { useRun, useRuns, type RunFilters } from "../api";
+import { useRun, useRunContent, useRuns, type RunFilters } from "../api";
 
 function reduction(r: Pick<Run, "tokens_before" | "tokens_after">): number {
   return r.tokens_before ? (100 * (r.tokens_before - r.tokens_after)) / r.tokens_before : 0;
@@ -52,9 +55,35 @@ function Stat({ label, children, hint }: { label: string; children: React.ReactN
   );
 }
 
+function RunContent({ id }: { id: number }) {
+  const content = useRunContent(id, true);
+  if (content.isPending) return <Skeleton className="h-32 w-full" />;
+  if (content.isError) {
+    const gone = content.error instanceof ApiError && (content.error.status === 404 || content.error.status === 410);
+    return gone ? (
+      <p className="text-[13px] text-muted-foreground">
+        This run was recorded without its content (STORE_CONTENT was off at the time, or the object expired).
+      </p>
+    ) : (
+      <ErrorState compact error={content.error} onRetry={() => void content.refetch()} />
+    );
+  }
+  const data = content.data as { request?: unknown; response?: unknown };
+  return (
+    <CodeBlock
+      samples={[
+        { id: "in", label: "Input", code: JSON.stringify(data.request ?? null, null, 2) },
+        { id: "out", label: "Output", code: JSON.stringify(data.response ?? null, null, 2) },
+      ]}
+      className="max-h-[28rem] [&_pre]:max-h-[24rem] [&_pre]:overflow-y-auto"
+    />
+  );
+}
+
 function RunDrawer({ id, onClose }: { id: number | null; onClose: () => void }) {
   const run = useRun(id);
   const r = run.data;
+  const { canWrite } = usePermissions();
   return (
     <Sheet open={id != null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent>
@@ -120,6 +149,12 @@ function RunDrawer({ id, onClose }: { id: number | null; onClose: () => void }) 
                 <h3 className="mb-3 text-[13px] font-semibold">Pipeline trace</h3>
                 <TraceView trace={r.trace} />
               </section>
+              {canWrite && r.has_content && id != null && (
+                <section>
+                  <h3 className="mb-3 text-[13px] font-semibold">Input and output</h3>
+                  <RunContent id={id} />
+                </section>
+              )}
             </>
           )}
         </SheetBody>
@@ -135,7 +170,8 @@ export function RunsScreen() {
   const [filters, setFilters] = React.useState<RunFilters>({});
   const runs = useRuns(filters);
   const items = runs.data?.pages.flatMap((p) => p.items) ?? [];
-  const openId = params.get("run") ? Number(params.get("run")) : null;
+  const runParam = Number(params.get("run"));
+  const openId = Number.isInteger(runParam) && runParam > 0 ? runParam : null;
   const open = (id: number | null) => router.replace(id == null ? pathname : `${pathname}?run=${id}`, { scroll: false });
   const filtered = !!(filters.source || filters.workload || filters.budget_missed);
 
@@ -227,6 +263,8 @@ export function RunsScreen() {
                   <TableRow
                     key={r.id}
                     tabIndex={0}
+                    role="button"
+                    aria-label={`Open run ${r.id}: ${workloadLabel(r.workload)}, ${formatNumber(r.tokens_before)} to ${formatNumber(r.tokens_after)} tokens`}
                     className="cursor-pointer"
                     onClick={() => open(r.id)}
                     onKeyDown={(e) => {

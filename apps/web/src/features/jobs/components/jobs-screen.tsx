@@ -11,6 +11,7 @@ import { JobChip } from "@/components/status-chip";
 import { Surface } from "@/components/surface";
 import { TableSkeleton } from "@/components/table-skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { Job } from "@/lib/api/types";
 import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
 
 import { useJobs } from "../api";
@@ -22,6 +23,26 @@ const EXAMPLE = [
   '# => {"id": "...", "status": "queued", "poll": "/v1/context/jobs/<id>"}',
   'curl $CONTEXTFORGE/v1/context/jobs/<id> -H "Authorization: Bearer cfk_..."',
 ].join("\n");
+
+/** What happened to a job, in words that match its status. */
+function JobOutcome({ job }: { job: Job }) {
+  const message = (job.error as { message?: string } | null)?.message;
+  if (job.run_id)
+    return (
+      <Link href={`/runs?run=${job.run_id}`} className="text-primary hover:underline">
+        Run {job.run_id}
+      </Link>
+    );
+  if (job.status === "failed") return <span className="text-danger">{message ?? "Failed"}</span>;
+  if (job.status === "running") return <span className="text-muted-foreground">Optimizing (attempt {job.attempts})</span>;
+  if (job.status === "succeeded") return <span className="text-muted-foreground">Done; the run was not recorded</span>;
+  // queued: a first try, or a retry after a failed attempt
+  return message ? (
+    <span className="text-warning">Retrying: {message}</span>
+  ) : (
+    <span className="text-faint">Waiting for a worker</span>
+  );
+}
 
 export function JobsScreen() {
   const jobs = useJobs();
@@ -76,15 +97,7 @@ export function JobsScreen() {
                     {formatRelative(j.created_at)}
                   </TableCell>
                   <TableCell className="text-[12.5px]">
-                    {j.run_id ? (
-                      <Link href={`/runs?run=${j.run_id}`} className="text-primary hover:underline">
-                        Run {j.run_id}
-                      </Link>
-                    ) : j.error ? (
-                      <span className="text-danger">{String((j.error as { message?: string }).message ?? "Failed")}</span>
-                    ) : (
-                      <span className="text-faint">Waiting for a worker</span>
-                    )}
+                    <JobOutcome job={j} />
                   </TableCell>
                 </TableRow>
               ))}

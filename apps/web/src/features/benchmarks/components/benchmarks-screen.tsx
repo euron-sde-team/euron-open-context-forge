@@ -1,6 +1,6 @@
 "use client";
 
-import { GaugeIcon, PlayIcon } from "lucide-react";
+import { DownloadIcon, GaugeIcon, PlayIcon } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -173,6 +173,22 @@ function Dataset() {
   );
 }
 
+/** The Markdown report the worker stored for a finished run (same-origin, cookie auth). */
+function ReportLink({ id, compact = false }: { id: string; compact?: boolean }) {
+  return (
+    <Button
+      variant="ghost"
+      size={compact ? "icon-sm" : "sm"}
+      nativeButton={false}
+      aria-label="Download report"
+      render={<a href={`/api/v1/benchmarks/${encodeURIComponent(id)}/report.md`} download={`contextforge-benchmark-${id}.md`} />}
+    >
+      <DownloadIcon />
+      {!compact && "Report"}
+    </Button>
+  );
+}
+
 export function BenchmarksScreen() {
   const { canWrite } = usePermissions();
   const runs = useBenchmarkRuns();
@@ -180,6 +196,11 @@ export function BenchmarksScreen() {
   const latest = runs.data?.find((r) => r.status === "succeeded");
   const detail = useBenchmarkRun(latest?.id);
   const busy = runs.data?.some((r) => r.status === "queued" || r.status === "running");
+  const runBenchmark = () =>
+    queue.mutate(3, {
+      onSuccess: () => toast.success("Benchmark queued. The worker runs it in the background."),
+      onError: (e) => toast.error(errorMessage(e)),
+    });
 
   return (
     <>
@@ -188,15 +209,7 @@ export function BenchmarksScreen() {
         description="Token reduction against fact and citation retention, ContextForge versus truncation at the same budget."
         actions={
           canWrite && (
-            <Button
-              disabled={busy || queue.isPending}
-              onClick={() =>
-                queue.mutate(3, {
-                  onSuccess: () => toast.success("Benchmark queued. The worker runs it in the background."),
-                  onError: (e) => toast.error(errorMessage(e)),
-                })
-              }
-            >
+            <Button disabled={busy || queue.isPending} onClick={runBenchmark}>
               <PlayIcon />
               {busy ? "Running..." : "Run benchmark"}
             </Button>
@@ -208,6 +221,7 @@ export function BenchmarksScreen() {
           <SurfaceHeader
             title="Latest results"
             titleExtra={<Hint term="readerAccuracy" />}
+            action={latest && <ReportLink id={latest.id} />}
             description={
               latest
                 ? `Dataset ${latest.dataset_version}, ${latest.cases} cases, ${latest.runs_per_case} timed runs each, finished ${formatRelative(latest.finished_at)}`
@@ -216,6 +230,8 @@ export function BenchmarksScreen() {
           />
           {runs.isError && !runs.data ? (
             <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
+          ) : latest && detail.isError ? (
+            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
           ) : !runs.data || (latest && !detail.data) ? (
             <div className="grid gap-3 px-5 pb-5 md:grid-cols-4">
               {Array.from({ length: 4 }, (_, i) => (
@@ -229,7 +245,7 @@ export function BenchmarksScreen() {
               description="The benchmark optimizes 12 committed cases (coding agents, support threads, RAG, research, agent JSON) at a fixed budget and checks every gold fact and citation survived. It runs in the worker and takes a few seconds."
               action={
                 canWrite ? (
-                  <Button disabled={busy || queue.isPending} onClick={() => queue.mutate(3)}>
+                  <Button disabled={busy || queue.isPending} onClick={runBenchmark}>
                     <PlayIcon />
                     Run the benchmark
                   </Button>
@@ -245,7 +261,9 @@ export function BenchmarksScreen() {
           <Dataset />
           <Surface>
             <SurfaceHeader title="History" description="Every benchmark run" />
-            {!runs.data?.length ? (
+            {runs.isError && !runs.data ? (
+              <ErrorState compact error={runs.error} onRetry={() => void runs.refetch()} />
+            ) : !runs.data?.length ? (
               <p className="px-5 pb-5 text-[13px] text-muted-foreground">Runs appear here after the first benchmark.</p>
             ) : (
               <ul className="divide-y divide-hairline px-5 pb-3">
@@ -261,7 +279,10 @@ export function BenchmarksScreen() {
                             : r.error ?? "In progress"}
                         </div>
                       </div>
-                      <JobChip value={r.status} />
+                      <div className="flex shrink-0 items-center gap-2">
+                        {r.status === "succeeded" && <ReportLink id={r.id} compact />}
+                        <JobChip value={r.status} />
+                      </div>
                     </li>
                   );
                 })}

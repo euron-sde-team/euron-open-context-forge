@@ -18,7 +18,7 @@ export function CodeBlock({ samples, className }: { samples: CodeSample[]; class
   const current = samples.find((s) => s.id === active) ?? samples[0];
   if (!current) return null;
   return (
-    <div className={cn("overflow-hidden rounded-xl bg-[#0d1017] text-[#d7dbe6] shadow-[var(--elev-1)] ring-1 ring-white/5", className)}>
+    <div className={cn("overflow-hidden rounded-xl bg-code-bg text-code-fg shadow-[var(--elev-1)] ring-1 ring-white/5", className)}>
       <div className="flex items-center justify-between gap-2 bg-white/[0.03] px-2 py-1.5">
         <div role="tablist" className="flex gap-0.5">
           {samples.map((s) => (
@@ -29,7 +29,7 @@ export function CodeBlock({ samples, className }: { samples: CodeSample[]; class
               aria-selected={s.id === current.id}
               onClick={() => setActive(s.id)}
               className={cn(
-                "h-6 rounded-md px-2.5 text-[12px] font-medium text-[#8b93a7] transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#818cf8]",
+                "h-6 rounded-md px-2.5 text-[12px] font-medium text-code-muted transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-ring",
                 s.id === current.id && "bg-white/10 text-white",
               )}
             >
@@ -40,7 +40,7 @@ export function CodeBlock({ samples, className }: { samples: CodeSample[]; class
         <CopyButton
           value={current.code}
           variant="ghost"
-          className="text-[#c4c9d6] hover:bg-white/10 hover:text-white"
+          className="text-code-fg hover:bg-white/10 hover:text-white"
         />
       </div>
       <pre className="overflow-x-auto px-4 py-3.5 font-mono text-[12px] leading-[1.7]">

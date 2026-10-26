@@ -33,6 +33,15 @@ const KINDS: { value: UpstreamKind; label: string }[] = [
   { value: "smartrouter", label: "SmartRouter" },
 ];
 
+/** scheme://host[:port], to tell a path change from a move to another host. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url.trim()).origin.toLowerCase();
+  } catch {
+    return url.trim().toLowerCase();
+  }
+}
+
 function UpstreamDialog({ upstream, open, onOpenChange }: { upstream: Upstream | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const create = useCreateUpstream();
   const update = useUpdateUpstream();
@@ -44,6 +53,7 @@ function UpstreamDialog({ upstream, open, onOpenChange }: { upstream: Upstream |
   const [budget, setBudget] = React.useState("");
   const [strategy, setStrategy] = React.useState<Strategy>("balanced");
   const [enabled, setEnabled] = React.useState(true);
+  const [clearKey, setClearKey] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const pending = create.isPending || update.isPending;
 
@@ -51,6 +61,7 @@ function UpstreamDialog({ upstream, open, onOpenChange }: { upstream: Upstream |
     if (!open) return;
     setError(null);
     setKey("");
+    setClearKey(false);
     setName(upstream?.name ?? "");
     setKind((upstream?.kind as UpstreamKind) ?? "openai");
     setUrl(upstream?.base_url ?? "");
@@ -65,6 +76,9 @@ function UpstreamDialog({ upstream, open, onOpenChange }: { upstream: Upstream |
     if (!/^https?:\/\//.test(url.trim())) return setError("The base URL starts with http:// or https://, for example https://api.openai.com/v1.");
     const n = budget.trim() ? Number(budget) : null;
     if (n != null && (!Number.isInteger(n) || n < 1)) return setError("The default budget is a whole number of tokens, or empty.");
+    const hostChanged = editing && upstream && hostOf(url) !== hostOf(upstream.base_url);
+    if (hostChanged && upstream.has_api_key && !key && !clearKey)
+      return setError("The host changed: enter the API key for the new host, or remove the stored key. A stored key is never sent to a new host.");
     setError(null);
     const done = {
       onSuccess: () => {
@@ -75,7 +89,7 @@ function UpstreamDialog({ upstream, open, onOpenChange }: { upstream: Upstream |
     };
     if (editing && upstream) {
       update.mutate(
-        { id: upstream.id, body: { kind, base_url: url.trim(), max_input_tokens: n, strategy, enabled, ...(key ? { api_key: key } : {}) } },
+        { id: upstream.id, body: { kind, base_url: url.trim(), max_input_tokens: n, strategy, enabled, ...(key ? { api_key: key } : clearKey ? { clear_api_key: true } : {}) } },
         done,
       );
     } else {
@@ -107,8 +121,14 @@ function UpstreamDialog({ upstream, open, onOpenChange }: { upstream: Upstream |
               <Input id="u-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="font-mono" />
             </Field>
             <Field label="API key" htmlFor="u-key" hint={editing && upstream?.has_api_key ? `Stored (${upstream.key_hint}). Leave empty to keep it.` : "Optional for local models"}>
-              <Input id="u-key" type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
+              <Input id="u-key" type="password" value={key} disabled={clearKey} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
             </Field>
+            {editing && upstream?.has_api_key && (
+              <label className="flex items-center gap-2 text-[13px]">
+                <Switch checked={clearKey} onCheckedChange={(v) => { setClearKey(v); if (v) setKey(""); }} aria-label="Remove stored key" />
+                Remove the stored key (for upstreams that need none)
+              </label>
+            )}
             <Field label="Default strategy">
               <Segmented<Strategy> ariaLabel="Default strategy" value={strategy} onChange={setStrategy} options={STRATEGIES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
             </Field>

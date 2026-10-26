@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLogout, useMe } from "@/features/auth/api";
 import { ChangePasswordDialog } from "@/features/auth/components/change-password-dialog";
+import { errorMessage } from "@/lib/api/errors";
 import { initials } from "@/lib/format";
 import { roleLabel } from "@/lib/roles";
 
@@ -27,10 +28,12 @@ export function UserMenu() {
 
   function signOut() {
     logout.mutate(undefined, {
-      onSettled: () => {
+      onSuccess: () => {
         toast.success("Signed out.");
         router.replace("/login");
       },
+      // The session cookie is still valid, so say so instead of pretending.
+      onError: (e) => toast.error(errorMessage(e)),
     });
   }
 
@@ -41,7 +44,7 @@ export function UserMenu() {
           aria-label="Account menu"
           className="flex size-9 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-[var(--chart-after)] to-[var(--primary)] text-[12px] font-semibold text-white dark:text-[#0b0d12]">
+          <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-[var(--chart-after)] to-[var(--primary)] text-[12px] font-semibold text-primary-foreground">
             {initials(user?.name)}
           </span>
         </DropdownMenuTrigger>
@@ -63,7 +66,7 @@ export function UserMenu() {
             Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={signOut}>
+          <DropdownMenuItem variant="destructive" disabled={logout.isPending} onClick={signOut}>
             <LogOutIcon />
             Sign out
           </DropdownMenuItem>

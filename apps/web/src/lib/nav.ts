@@ -4,7 +4,6 @@ import {
   FlaskConicalIcon,
   GaugeIcon,
   KeyRoundIcon,
-  LayersIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
   PlugZapIcon,
@@ -19,6 +18,8 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Hidden from viewers when the API only serves admins and owners. */
+  adminOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -54,8 +55,8 @@ export const NAV: NavGroup[] = [
   {
     label: "Organisation",
     items: [
-      { href: "/users", label: "Users", icon: UsersIcon },
-      { href: "/audit", label: "Audit log", icon: ScrollTextIcon },
+      { href: "/users", label: "Users", icon: UsersIcon, adminOnly: true },
+      { href: "/audit", label: "Audit log", icon: ScrollTextIcon, adminOnly: true },
       { href: "/settings", label: "Settings", icon: SettingsIcon },
     ],
   },
@@ -75,6 +76,3 @@ export function activeNavItem(pathname: string): NavItem | undefined {
 export function isActive(item: NavItem, pathname: string): boolean {
   return activeNavItem(pathname)?.href === item.href;
 }
-
-/** Icon reused for the engine stages in traces. */
-export const STAGE_ICON = LayersIcon;

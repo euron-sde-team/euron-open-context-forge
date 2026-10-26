@@ -6,12 +6,14 @@ import { usePathname } from "next/navigation";
 
 import { ForgeLogo } from "@/components/forge-logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePermissions } from "@/features/auth/api";
 import { cn } from "@/lib/cn";
 import { isActive, NAV } from "@/lib/nav";
 import { useUiPrefs } from "@/lib/store";
 
 export function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { canWrite } = usePermissions();
   return (
     <nav aria-label="Main" className="flex flex-col gap-5">
       {NAV.map((group) => (
@@ -21,7 +23,7 @@ export function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: bool
           ) : (
             <div className="px-2.5 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-faint uppercase">{group.label}</div>
           )}
-          {group.items.map((item) => {
+          {group.items.filter((item) => canWrite || !item.adminOnly).map((item) => {
             const active = isActive(item, pathname);
             const link = (
               <Link

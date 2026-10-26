@@ -84,6 +84,8 @@ function RecentRuns() {
             <Skeleton key={i} className="h-10 w-full" />
           ))}
         </div>
+      ) : runs.isError && !runs.data ? (
+        <ErrorState compact error={runs.error} onRetry={() => void runs.refetch()} />
       ) : items.length === 0 ? (
         <p className="px-5 pb-5 text-[13px] text-muted-foreground">Runs appear here as soon as something calls the API.</p>
       ) : (

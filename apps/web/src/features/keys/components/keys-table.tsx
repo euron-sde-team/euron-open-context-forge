@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRoundIcon, PlusIcon } from "lucide-react";
+import { BanIcon, KeyRoundIcon, PencilIcon, PlusIcon } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -33,10 +33,12 @@ export function KeysTable({
   includeRevoked,
   canWrite,
   onCreate,
+  onEdit,
 }: {
   includeRevoked: boolean;
   canWrite: boolean;
   onCreate: () => void;
+  onEdit: (k: ApiKey) => void;
 }) {
   const q = useKeys(includeRevoked);
   const revoke = useRevokeKey();
@@ -96,11 +98,17 @@ export function KeysTable({
                   </Chip>
                 </TableCell>
                 {canWrite && (
-                  <TableCell className="text-right">
+                  <TableCell className="w-px text-right">
                     {status === "active" && (
-                      <Button variant="destructive-soft" size="xs" onClick={() => setTarget(k)}>
-                        Revoke
+                      <div className="flex justify-end gap-1">
+                      <Button variant="subtle" size="icon-sm" aria-label={`Edit ${k.name}`} onClick={() => onEdit(k)}>
+                        <PencilIcon />
                       </Button>
+                      <Button variant="destructive-soft" size="xs" aria-label={`Revoke ${k.name}`} onClick={() => setTarget(k)}>
+                        <BanIcon className="sm:hidden" />
+                        <span className="hidden sm:inline">Revoke</span>
+                      </Button>
+                      </div>
                     )}
                   </TableCell>
                 )}

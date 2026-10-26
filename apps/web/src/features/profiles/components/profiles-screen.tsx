@@ -242,7 +242,9 @@ export function ProfilesScreen() {
         </div>
       ) : profiles.data.length === 0 ? (
         <Surface>
-          <EmptyState icon={SlidersHorizontalIcon} title="No profiles" description="The built-in profiles should always be listed. Reload the page." />
+          <EmptyState icon={SlidersHorizontalIcon} title="No profiles" description="The built-in profiles should always be listed. Reload them from the API."
+            action={<Button variant="outline" size="sm" onClick={() => void profiles.refetch()}>Reload</Button>}
+          />
         </Surface>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -273,12 +275,12 @@ export function ProfilesScreen() {
                 </span>
                 {canWrite && (
                   <div className="flex gap-1">
-                    <Button variant="subtle" size="xs" onClick={() => open(p)}>
+                    <Button variant="subtle" size="xs" aria-label={`Edit ${p.name}`} onClick={() => open(p)}>
                       <PencilIcon />
                       Edit
                     </Button>
                     {(!p.builtin || p.customized) && (
-                      <Button variant="subtle" size="xs" onClick={() => setTarget(p)}>
+                      <Button variant="subtle" size="xs" aria-label={`${p.builtin ? "Reset" : "Delete"} ${p.name}`} onClick={() => setTarget(p)}>
                         {p.builtin ? <RotateCcwIcon /> : <Trash2Icon />}
                         {p.builtin ? "Reset" : "Delete"}
                       </Button>

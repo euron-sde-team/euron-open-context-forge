@@ -3,6 +3,7 @@
 import { ScrollTextIcon, SearchIcon } from "lucide-react";
 import * as React from "react";
 
+import { AdminOnly } from "@/components/admin-only";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePermissions } from "@/features/auth/api";
 import type { AuditEntry } from "@/lib/api/types";
 import { formatDateTime, formatRelative } from "@/lib/format";
 
@@ -40,7 +42,8 @@ export function AuditScreen() {
     const t = setTimeout(() => setAction(input.trim()), 350);
     return () => clearTimeout(t);
   }, [input]);
-  const q = useAuditLog(action || undefined);
+  const { user, canWrite } = usePermissions();
+  const q = useAuditLog(action || undefined, canWrite);
   const rows = q.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
@@ -49,6 +52,10 @@ export function AuditScreen() {
         title="Audit log"
         description="Every configuration change and sign-in, append-only: who did what, to which object, from where."
       />
+      {user && !canWrite ? (
+        <AdminOnly what="The audit log" />
+      ) : (
+      <>
       <div className="mb-3 relative w-full sm:w-72">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
         <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Filter by action, e.g. profile.saved" aria-label="Filter by action" className="pl-9" />
@@ -117,6 +124,8 @@ export function AuditScreen() {
           </>
         )}
       </Surface>
+      </>
+      )}
     </>
   );
 }

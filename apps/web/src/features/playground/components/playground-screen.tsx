@@ -239,7 +239,17 @@ export function PlaygroundScreen() {
         <Surface className="flex flex-col">
           <SurfaceHeader title="Input" description="OpenAI chat messages plus optional documents" />
           <div className="space-y-4 px-5 pb-5">
-            <Field label="Start from a sample" htmlFor="sample">
+            <Field
+              label="Start from a sample"
+              htmlFor="sample"
+              error={
+                samples.isError
+                  ? `Could not load the samples: ${errorMessage(samples.error)}`
+                  : sample.isError
+                    ? `Could not load that sample: ${errorMessage(sample.error)}`
+                    : undefined
+              }
+            >
               <SimpleSelect
                 id="sample"
                 value={sampleId ?? ""}

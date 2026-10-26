@@ -21,7 +21,7 @@ const buttonVariants = cva(
         outline: "bg-card text-foreground shadow-[var(--elev-1)] ring-1 ring-border hover:bg-muted ring-inset",
         ghost: "text-foreground hover:bg-muted aria-expanded:bg-muted",
         subtle: "text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted",
-        destructive: "bg-danger text-white shadow-[var(--elev-1)] hover:brightness-110 dark:text-[#1a0a0e]",
+        destructive: "bg-danger text-danger-foreground shadow-[var(--elev-1)] hover:brightness-110",
         "destructive-soft": "bg-danger-soft text-danger hover:brightness-95 dark:hover:brightness-125",
         link: "h-auto px-0 text-primary underline-offset-4 hover:underline active:scale-100",
       },
