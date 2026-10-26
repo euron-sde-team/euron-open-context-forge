@@ -32,6 +32,8 @@ async function settle(page, ms = 1200) {
 
 async function shot(page, name, { tour = true, fullPage = false } = {}) {
   await page.evaluate(() => window.scrollTo(0, 0));
+  // Park the pointer in an empty corner so no hover tooltip leaks into a capture.
+  await page.mouse.move(1, 1);
   await sleep(250);
   await page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage });
   if (tour) await page.screenshot({ path: path.join(TOUR, `${String(++tourIndex).padStart(2, "0")}.png`) });

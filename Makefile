@@ -16,8 +16,8 @@ ENV         ?= aws-dev
 # The demo password make env generated; e2e, qa and bench sign in with it.
 DEMO_PW      = $(shell grep -s '^CF_DEMO_PASSWORD=' $(COMPOSE_DIR)/.env | cut -d= -f2)
 
-.PHONY: help env up up-aws down logs ps demo test test-integration test-matrix e2e qa bench lint \
-        typecheck build openapi sanitize benchmark tf-fmt tf-validate tf-lint tf-security tf-aws-on-floci \
+.PHONY: help env up up-aws down logs ps demo test test-integration migration test-matrix e2e qa bench lint \
+        typecheck build openapi sanitize benchmark admin aws-deploy aws-migrate aws-admin tf-fmt tf-validate tf-lint tf-security tf-aws-on-floci \
         aws-plan clean
 
 help: ## Show this help
@@ -32,17 +32,17 @@ up: env ## Start everything on emulated AWS (Floci), provisioned by the same Ter
 	$(FLOCI) up -d --build --wait
 	@echo ""
 	@echo "  dashboard  http://localhost:$${CF_WEB_PORT:-4310}"
-	@echo "  gateway    http://localhost:$${CF_API_PORT:-4330}/v1   (OpenAI-compatible)"
+	@echo "  api        http://localhost:$${CF_API_PORT:-4330}/v1/context   (and /v1/chat/completions)"
 	@echo "  api docs   http://localhost:$${CF_API_PORT:-4330}/docs"
 	@echo "  mock LLM   http://localhost:$${CF_MOCK_LLM_PORT:-4350}"
 	@echo ""
-	@echo "  Next: make demo   (demo organisation, 60 days of history, live traffic)"
+	@echo "  Next: make demo   (keys, upstreams, 60 days of runs, a benchmark, live traffic)"
 
 up-aws: env ## Start the stack against real AWS resources (needs deploy/compose/.env.aws)
 	@test -f $(COMPOSE_DIR)/.env.aws || { echo "copy $(COMPOSE_DIR)/.env.aws.example to .env.aws first"; exit 1; }
 	$(AWS_LOCAL) up -d --build --wait
 
-demo: ## Seed the demo organisation and send live traffic through the gateway (prints logins)
+demo: ## Seed the demo install and send live traffic through the API (prints the login and a key)
 	$(FLOCI) exec -T -e DEMO_PASSWORD=$$(grep CF_DEMO_PASSWORD $(COMPOSE_DIR)/.env | cut -d= -f2) \
 	  -e MOCK_LLM_URL=http://mock-llm:4350 -e CONTEXTFORGE_API_URL=http://localhost:8080 \
 	  -e CONTEXTFORGE_PUBLIC_URL=http://localhost:$${CF_API_PORT:-4330} api contextforge seed-demo
@@ -50,6 +50,10 @@ demo: ## Seed the demo organisation and send live traffic through the gateway (p
 down: ## Stop the stack and delete its volumes
 	-$(FLOCI) down -v --remove-orphans
 	-$(AWS_LOCAL) down -v --remove-orphans 2>/dev/null
+
+admin: ## Create or reset an owner on the local stack (EMAIL=you@example.com; prompts for the password)
+	@test -n "$(EMAIL)" || { echo "usage: make admin EMAIL=you@example.com"; exit 1; }
+	$(FLOCI) exec api contextforge create-owner --email "$(EMAIL)"
 
 logs: ## Tail logs (SERVICE=api|worker|web|floci|...)
 	$(FLOCI) logs -f --tail 100 $(SERVICE)
@@ -70,6 +74,12 @@ typecheck: ## Typecheck the API (mypy --strict) and the web app (tsc)
 test: ## Unit tests: API (pytest) and web (vitest). No database, no network
 	$(API) uv run pytest tests/unit -q
 	$(WEB) pnpm test
+
+migration: ## Autogenerate an Alembic revision from the models: make migration MSG="add x" (local Postgres)
+	@test -n "$(MSG)" || (echo 'usage: make migration MSG="what changed"' && exit 1)
+	@scripts/test-db.sh
+	$(API) DATABASE_URL=postgresql+asyncpg://contextforge:contextforge@localhost:$${CF_PG_PORT:-4342}/contextforge \
+	  sh -c 'uv run contextforge migrate && uv run contextforge revision -m "$(MSG)"'
 
 test-integration: ## API integration tests against real Postgres and Redis (started if needed)
 	@scripts/test-db.sh
@@ -120,6 +130,18 @@ tf-security: ## checkov policy scan of the Terraform
 
 tf-aws-on-floci: ## Plan, apply, re-plan and destroy the full aws-dev environment against a throwaway Floci
 	@scripts/tf-aws-on-floci.sh
+
+aws-deploy: ## One shot: registries, images, infrastructure, migrations, rollout (ENV=aws-dev|aws-prod TAG=...)
+	@test -n "$(TAG)" || { echo "usage: make aws-deploy ENV=aws-dev TAG=0.1.0"; exit 1; }
+	@scripts/aws-deploy.sh $(ENV) $(TAG)
+
+aws-migrate: ## Run database migrations as a one-off ECS task (ENV=...)
+	@scripts/aws-run-task.sh $(ENV) migrate
+
+aws-admin: ## Create the first owner as a one-off ECS task (ENV=... EMAIL=...; CONTEXTFORGE_OWNER_PASSWORD in your env)
+	@test -n "$(EMAIL)" || { echo "usage: CONTEXTFORGE_OWNER_PASSWORD=... make aws-admin ENV=aws-dev EMAIL=you@example.com"; exit 1; }
+	@test -n "$$CONTEXTFORGE_OWNER_PASSWORD" || { echo "set CONTEXTFORGE_OWNER_PASSWORD (at least 10 characters, upper and lower case and a digit)"; exit 1; }
+	@scripts/aws-run-task.sh $(ENV) create-owner --email "$(EMAIL)"
 
 aws-plan: ## terraform plan for ENV (aws-dev | aws-prod); needs terraform.tfvars and AWS credentials
 	cd infra/terraform/envs/$(ENV) && terraform init -input=false && terraform plan
