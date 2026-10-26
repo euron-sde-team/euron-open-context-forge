@@ -28,7 +28,6 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 def client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """The peer address. Uvicorn's proxy-headers support already resolved X-Forwarded-For
+    against FORWARDED_ALLOW_IPS (the load balancer), so a client cannot forge it."""
     return request.client.host if request.client else None

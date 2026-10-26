@@ -5,9 +5,8 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Query
-from sqlalchemy import select
 
-from contextforge.audit.models import AuditLog
+from contextforge.audit import service
 from contextforge.auth.dependencies import Admin
 from contextforge.core.deps import SessionDep
 from contextforge.core.schemas import ApiModel, Page, decode_cursor, encode_cursor
@@ -35,12 +34,10 @@ async def list_audit(
     limit: int = Query(50, ge=1, le=200),
     action: str | None = None,
 ) -> Page[AuditOut]:
-    stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit + 1)
-    if (after := decode_cursor(cursor)) and after.isdigit():
-        stmt = stmt.where(AuditLog.id < int(after))
-    if action:
-        stmt = stmt.where(AuditLog.action.startswith(action))
-    rows = list((await session.scalars(stmt)).all())
+    after = decode_cursor(cursor)
+    rows = await service.list_entries(
+        session, int(after) if after and after.isdigit() else None, limit, action
+    )
     return Page[AuditOut](
         items=[AuditOut.model_validate(r) for r in rows[:limit]],
         next_cursor=encode_cursor(rows[limit - 1].id) if len(rows) > limit else None,

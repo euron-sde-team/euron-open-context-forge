@@ -112,7 +112,12 @@ async def service_key(request: Request, container: ContainerDep) -> KeyContext:
             details={"limit_rpm": limit, "retry_after_s": decision.retry_after_s},
             headers={"retry-after": str(decision.retry_after_s)},
         )
-    if row.last_used_at is None or now - row.last_used_at > _TOUCH_EVERY:
+    # The row is cached for a few seconds, so its last_used_at lags; remember this
+    # process's own last write too, or every request in that window would write again.
+    touched = container.key_touched.get(row.id)
+    last = max(filter(None, (row.last_used_at, touched)), default=None)
+    if last is None or now - last > _TOUCH_EVERY:
+        container.key_touched[row.id] = now
         try:
             async with container.db.sessionmaker() as session:
                 await session.execute(

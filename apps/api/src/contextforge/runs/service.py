@@ -11,7 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,15 @@ from contextforge.runs.models import OptimizationRun, RunRollupHourly
 from contextforge.runs.schemas import Breakdown, Overview, Point, RunDetail, RunOut
 
 
-async def record(session: AsyncSession, run: OptimizationRun) -> int:
+async def record(
+    session: AsyncSession, run: OptimizationRun, rollup_model: str | None = None
+) -> int:
+    """Insert the run and fold it into its hourly rollup in the same transaction.
+
+    ``rollup_model`` is the model family the rollup groups by. Callers pass a bounded
+    value (a known price family or "other") so arbitrary model names cannot create one
+    rollup row per request.
+    """
     session.add(run)
     await session.flush()
     hour = (run.created_at or datetime.now(UTC)).replace(minute=0, second=0, microsecond=0)
@@ -29,7 +37,7 @@ async def record(session: AsyncSession, run: OptimizationRun) -> int:
         "hour": hour,
         "source": run.source,
         "workload": run.workload,
-        "model": run.model[:200],
+        "model": (rollup_model or run.model)[:200],
         "runs": 1,
         "tokens_before": run.tokens_before,
         "tokens_after": run.tokens_after,
@@ -193,7 +201,3 @@ async def overview(session: AsyncSession, days: int) -> Overview:
         by_source=_breakdown(by_s),
         by_model=_breakdown(by_m)[:10],
     )
-
-
-async def count_runs(session: AsyncSession) -> int:
-    return int(await session.scalar(select(func.count()).select_from(OptimizationRun)) or 0)

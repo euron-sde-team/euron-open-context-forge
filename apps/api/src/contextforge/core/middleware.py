@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import time
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from contextforge.core.config import Settings
 from contextforge.core.logs import request_id_var
 
 log = logging.getLogger("contextforge.http")
@@ -64,3 +66,78 @@ class RequestContextMiddleware:
                     },
                 )
             request_id_var.reset(token)
+
+
+_BODY_METHODS = {"POST", "PUT", "PATCH"}
+
+
+class BodySizeLimitMiddleware:
+    """Refuses request bodies over ``limit`` bytes with 413, whatever their framing.
+
+    ``Content-Length`` is checked up front; chunked bodies (no length) are counted as they
+    arrive and refused the moment they pass the limit, before any route parses them. The
+    accepted body is then replayed to the app unchanged.
+    """
+
+    def __init__(self, app: ASGIApp, settings: Settings) -> None:
+        self.app = app
+        self.settings = settings
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("method") not in _BODY_METHODS:
+            await self.app(scope, receive, send)
+            return
+        limit = self.settings.max_body_bytes
+        length = dict(scope.get("headers") or []).get(b"content-length", b"")
+        if length.isdigit() and int(length) > limit:
+            await self._refuse(send, limit)
+            return
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body = message.get("body", b"")
+            size += len(body)
+            if size > limit:
+                await self._refuse(send, limit)
+                return
+            chunks.append(body)
+            if not message.get("more_body", False):
+                break
+        replayed = False
+
+        async def replay() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+            return await receive()  # after the body: wait for a disconnect
+
+        await self.app(scope, replay, send)
+
+    async def _refuse(self, send: Send, limit: int) -> None:
+        body = json.dumps(
+            {
+                "error": {
+                    "code": "payload_too_large",
+                    "type": "invalid_request_error",
+                    "message": f"The request body is larger than {limit:,} bytes. Split "
+                    "it, use a background job, or raise MAX_BODY_BYTES",
+                    "details": {"limit_bytes": limit},
+                }
+            }
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                    (b"connection", b"close"),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})

@@ -10,10 +10,8 @@ from botocore.config import Config
 from contextforge.core.config import Settings
 
 
-def aws_client(settings: Settings, service: str, *, public: bool = False) -> Any:
+def aws_client(settings: Settings, service: str) -> Any:
     endpoint = settings.aws_endpoint_url
-    if public and settings.s3_public_endpoint:
-        endpoint = settings.s3_public_endpoint
     config = Config(
         retries={"max_attempts": 3, "mode": "standard"},
         s3={"addressing_style": "path" if settings.s3_force_path_style else "auto"},

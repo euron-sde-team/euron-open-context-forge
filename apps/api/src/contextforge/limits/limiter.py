@@ -1,4 +1,4 @@
-"""Rate (RPM, TPM) and concurrency limits in Redis.
+"""Per-key request rate limits (RPM) in Redis.
 
 Rates use the sliding-window counter algorithm: the previous fixed window's count is
 weighted by how much of it still overlaps the sliding window. It needs two integers per
@@ -13,7 +13,6 @@ import time
 from dataclasses import dataclass
 
 from redis.asyncio import Redis
-from redis.asyncio.client import Pipeline
 
 _SLIDING = """
 local amount = tonumber(ARGV[1])
@@ -31,22 +30,6 @@ redis.call('EXPIRE', KEYS[1], window * 2)
 return {1, math.floor(weighted + amount)}
 """
 
-_ACQUIRE = """
-local n = redis.call('INCR', KEYS[1])
-redis.call('EXPIRE', KEYS[1], ARGV[2])
-if n > tonumber(ARGV[1]) then
-  redis.call('DECR', KEYS[1])
-  return 0
-end
-return 1
-"""
-
-_RELEASE = """
-local n = redis.call('DECR', KEYS[1])
-if n < 0 then redis.call('SET', KEYS[1], 0) end
-return 1
-"""
-
 
 @dataclass(frozen=True, slots=True)
 class LimitDecision:
@@ -61,8 +44,6 @@ class Limiter:
     def __init__(self, redis: Redis) -> None:
         self._redis = redis
         self._sliding = redis.register_script(_SLIDING)
-        self._acquire = redis.register_script(_ACQUIRE)
-        self._release = redis.register_script(_RELEASE)
 
     def _keys(self, name: str, now: float) -> tuple[list[str], float, int]:
         window = int(now // self.WINDOW_S)
@@ -77,21 +58,3 @@ class Limiter:
             keys=keys, args=[amount, limit, self.WINDOW_S, f"{frac:.6f}"]
         )
         return LimitDecision(bool(int(allowed)), 0 if allowed else max(1, retry), int(observed))
-
-    async def correct(self, name: str, delta: int) -> None:
-        """Adjust the current window after the real token count is known."""
-        if delta == 0:
-            return
-        keys, _, _ = self._keys(name, time.time())
-        await self._redis.incrby(keys[0], delta)
-
-    def correct_in(self, pipe: Pipeline, name: str, delta: int) -> None:
-        if delta:
-            keys, _, _ = self._keys(name, time.time())
-            pipe.incrby(keys[0], delta)
-
-    async def acquire(self, name: str, limit: int, ttl_s: int) -> bool:
-        return bool(int(await self._acquire(keys=[f"cf:conc:{name}"], args=[limit, ttl_s])))
-
-    async def release(self, name: str) -> None:
-        await self._release(keys=[f"cf:conc:{name}"])

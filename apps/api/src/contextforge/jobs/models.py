@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,16 @@ from contextforge.core.db import Base, TimestampMixin, new_id
 
 class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        # The worker claims the oldest queued (or lease-expired) job with SKIP LOCKED.
+        Index(
+            "ix_jobs_claim",
+            "created_at",
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
+        # The jobs list, newest first across every status.
+        Index("ix_jobs_created_at", text("created_at DESC")),
+    )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_id)
     # queued -> running -> succeeded | failed
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")

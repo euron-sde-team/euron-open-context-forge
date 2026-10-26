@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,12 @@ class OptimizationRun(Base):
     """
 
     __tablename__ = "optimization_runs"
+    # Runs list filters (source, workload, missed budgets), newest first on id.
+    __table_args__ = (
+        Index("ix_runs_source_id", "source", text("id DESC")),
+        Index("ix_runs_workload_id", "workload", text("id DESC")),
+        Index("ix_runs_budget_missed", text("id DESC"), postgresql_where=text("NOT budget_met")),
+    )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True

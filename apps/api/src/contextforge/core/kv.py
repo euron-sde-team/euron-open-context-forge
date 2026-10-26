@@ -72,30 +72,45 @@ _FOREVER_S = 10 * 365 * 24 * 3600
 
 
 class MemoryKV:
-    """Bounded LRU with expiry, plus fixed-window rate counters. One process only."""
+    """LRU with expiry bounded by entries and bytes, plus fixed-window rate counters.
+
+    One process only. The byte budget matters: result cache entries can be megabytes, so
+    an entry count alone would let the cache grow to gigabytes.
+    """
 
     backend = "memory"
 
-    def __init__(self, max_entries: int = 2048) -> None:
+    def __init__(self, max_entries: int = 2048, max_bytes: int = 64_000_000) -> None:
         self._data: OrderedDict[str, tuple[float, bytes]] = OrderedDict()
         self._windows: dict[str, tuple[int, int]] = {}
         self._max = max_entries
+        self._max_bytes = max_bytes
+        self._bytes = 0
 
     async def get(self, key: str) -> bytes | None:
         hit = self._data.get(key)
         if hit is None:
             return None
         if hit[0] < time.monotonic():
-            self._data.pop(key, None)
+            self._drop(key)
             return None
         self._data.move_to_end(key)
         return hit[1]
 
     async def set(self, key: str, value: bytes, ttl_s: int) -> None:
+        if len(value) > self._max_bytes:
+            return
+        self._drop(key)
         self._data[key] = (time.monotonic() + ttl_s, value)
-        self._data.move_to_end(key)
-        while len(self._data) > self._max:
-            self._data.popitem(last=False)
+        self._bytes += len(key) + len(value)
+        while len(self._data) > self._max or self._bytes > self._max_bytes:
+            oldest = next(iter(self._data))
+            self._drop(oldest)
+
+    def _drop(self, key: str) -> None:
+        old = self._data.pop(key, None)
+        if old is not None:
+            self._bytes -= len(key) + len(old[1])
 
     async def incr(self, key: str) -> int:
         current = await self.get(key)
@@ -106,6 +121,9 @@ class MemoryKV:
     async def hit(self, name: str, limit: int, amount: int = 1) -> LimitDecision:
         now = time.time()
         window = int(now // Limiter.WINDOW_S)
+        if len(self._windows) > 10_000:
+            # Only the current window matters; forget every key from earlier ones.
+            self._windows = {k: v for k, v in self._windows.items() if v[0] == window}
         current_window, count = self._windows.get(name, (window, 0))
         if current_window != window:
             count = 0
@@ -120,7 +138,8 @@ class MemoryKV:
 
     async def close(self) -> None:
         self._data.clear()
+        self._bytes = 0
 
 
-def create_kv(redis_url: str) -> KV:
-    return RedisKV(redis_url) if redis_url else MemoryKV()
+def create_kv(redis_url: str, memory_max_bytes: int = 64_000_000) -> KV:
+    return RedisKV(redis_url) if redis_url else MemoryKV(max_bytes=memory_max_bytes)

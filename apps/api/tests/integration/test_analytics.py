@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import text
 
 from contextforge.benchmark_runs import service as bench
-from tests.integration.conftest import Api, World, optimize_body
+from tests.integration.conftest import Api, World, login, optimize_body
 from tests.unit.engine.fixtures import coding_trace, support_thread
 
 pytestmark = pytest.mark.integration
@@ -76,6 +76,16 @@ async def test_stored_content_only_when_enabled(api: Api, world: World) -> None:
         api.app.state.container.settings.store_content = False
     content = await api.ok("GET", f"/api/v1/runs/{rid}/content")
     assert content["request"]["model"] == "gpt-4o" and content["response"]["stats"]
+    await api.ok(
+        "POST",
+        "/api/v1/users",
+        {"email": "v2@example.test", "name": "V", "role": "viewer", "password": "Viewer-Pass-123"},
+    )
+    viewer = await login(api.app, {"email": "v2@example.test", "password": "Viewer-Pass-123"})
+    try:
+        assert (await viewer.get(f"/api/v1/runs/{rid}/content")).status_code == 403
+    finally:
+        await viewer.aclose()
 
 
 async def test_benchmark_run_from_dashboard(api: Api) -> None:
@@ -91,3 +101,20 @@ async def test_benchmark_run_from_dashboard(api: Api) -> None:
     report = await api.client.get(f"/api/v1/benchmarks/{queued['id']}/report.md")
     assert report.status_code == 200 and "simulated" in report.text
     assert (await api.ok("GET", "/api/v1/benchmarks"))[0]["id"] == queued["id"]
+
+
+async def test_abandoned_benchmark_run_does_not_block_new_runs(api: Api) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from contextforge.benchmark_runs.models import BenchmarkRun
+
+    queued = await api.ok("POST", "/api/v1/benchmarks", {"runs_per_case": 1}, status=202)
+    async with api.app.state.container.db.sessionmaker() as s:
+        row = await s.get(BenchmarkRun, queued["id"])
+        assert row is not None
+        row.status = "running"
+        row.created_at = datetime.now(UTC) - timedelta(hours=1)  # its worker died long ago
+        await s.commit()
+    again = await api.ok("POST", "/api/v1/benchmarks", {"runs_per_case": 1}, status=202)
+    old = await api.ok("GET", f"/api/v1/benchmarks/{queued['id']}")
+    assert again["status"] == "queued" and old["status"] == "failed" and "stopped" in old["error"]

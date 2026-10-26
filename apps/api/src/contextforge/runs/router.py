@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query, Response
 
-from contextforge.auth.dependencies import Viewer
+from contextforge.auth.dependencies import Admin, Viewer
 from contextforge.core.deps import ContainerDep, SessionDep
 from contextforge.core.errors import NotFoundError
 from contextforge.core.schemas import Page, decode_cursor, encode_cursor
@@ -41,9 +41,11 @@ async def get_run(run_id: int, _: Viewer, session: SessionDep) -> RunDetail:
     return await service.get_run(session, run_id)
 
 
-@router.get("/runs/{run_id}/content", summary="Stored input and output (STORE_CONTENT only)")
+@router.get(
+    "/runs/{run_id}/content", summary="Stored input and output (STORE_CONTENT only, admins)"
+)
 async def run_content(
-    run_id: int, _: Viewer, session: SessionDep, container: ContainerDep
+    run_id: int, _: Admin, session: SessionDep, container: ContainerDep
 ) -> dict[str, Any]:
     row = await session.get(OptimizationRun, run_id)
     if row is None or row.content_key is None:

@@ -5,7 +5,8 @@ Every setting comes from the environment. Security-relevant settings are checked
 running with demo secrets.
 
 Redis is optional: leave ``REDIS_URL`` empty and the result cache, rate limits and config
-invalidation run in process (correct for one replica; use Redis for several).
+invalidation run in process (correct for one single-process replica, the default; use
+Redis for several replicas or WEB_CONCURRENCY above 1).
 """
 
 from __future__ import annotations
@@ -76,7 +77,6 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_endpoint_url: str | None = None
     s3_force_path_style: bool = False
-    s3_public_endpoint: str | None = None
     # Job payloads and results, benchmark reports. Rows keep only the object key.
     payloads_bucket: str = "contextforge-local-payloads"
     storage: Literal["local", "s3"] = "local"
@@ -89,7 +89,13 @@ class Settings(BaseSettings):
     default_rpm_limit: int = 600
     result_cache_ttl_s: int = 600
     result_cache_max_bytes: int = 2_000_000
+    # Without Redis: the in-process cache's total size (results are evicted oldest first).
+    memory_cache_max_bytes: int = Field(64_000_000, ge=1_000_000)
     max_body_bytes: int = 32_000_000
+    # Engine runs are CPU bound: cap concurrent runs per process and how long a request
+    # waits for a slot before it gets 503 engine_busy (scale with replicas, not threads).
+    engine_concurrency: int = Field(4, ge=1, le=64)
+    engine_queue_timeout_s: float = Field(10.0, gt=0)
     store_content: bool = False
     tokenizer_aliases: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
     model_prices: Annotated[dict[str, Decimal], NoDecode] = Field(
@@ -110,6 +116,9 @@ class Settings(BaseSettings):
     # Jobs
     job_poll_interval_s: float = 1.0
     job_lease_s: int = 300
+    # The worker serves its own /metrics (job counters, job-side optimize metrics) here;
+    # 0 turns it off. The API serves /metrics on its HTTP port.
+    worker_metrics_port: int = Field(9464, ge=0, le=65535)
 
     otel_enabled: bool = False
 

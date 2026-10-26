@@ -43,7 +43,7 @@ TEST_REDIS = os.environ.get("TEST_REDIS_URL", "redis://localhost:4379/15")
 OWNER = {"email": "owner@example.test", "password": "Owner-Pass-123"}
 TABLES = (
     "run_rollups_hourly, optimization_runs, jobs, benchmark_runs, audit_log, api_keys, "
-    "upstreams, workload_profiles, users"
+    "upstreams, workload_profiles, revoked_sessions, users"
 )
 
 
@@ -118,7 +118,6 @@ def make_settings(database: str, tmp_path: Path, mock_url: str, **overrides: Any
         "key_mode": os.environ.get("TEST_KEY_MODE", "local"),
         "storage": os.environ.get("TEST_STORAGE", "local"),
         "aws_endpoint_url": os.environ.get("TEST_AWS_ENDPOINT"),
-        "s3_public_endpoint": os.environ.get("TEST_AWS_ENDPOINT"),
         "s3_force_path_style": True,
         "kms_key_id": os.environ.get("TEST_KMS_KEY_ID", "alias/contextforge-local"),
         "payloads_bucket": os.environ.get("TEST_PAYLOADS_BUCKET", "contextforge-local-payloads"),

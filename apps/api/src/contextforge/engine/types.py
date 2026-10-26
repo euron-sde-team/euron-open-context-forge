@@ -28,19 +28,46 @@ Category = Literal["history", "tool", "documents", "summary"]
 CitationStatus = Literal["kept", "compressed", "merged", "dropped"]
 
 
+def _reject_lone_surrogates(value: Any) -> None:
+    """JSON may escape a lone UTF-16 surrogate ("\\ud800"); it is not text in any encoding a
+    tokenizer, hash or provider accepts, so it is refused at the boundary (HTTP 422)."""
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("text contains an unpaired UTF-16 surrogate") from None
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            _reject_lone_surrogates(k)
+            _reject_lone_surrogates(v)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            _reject_lone_surrogates(v)
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    @model_validator(mode="after")
+    def _valid_text(self) -> Any:
+        # Nested models validate themselves; this covers own fields and passthrough extras.
+        for name in type(self).model_fields:
+            value = getattr(self, name)
+            if not isinstance(value, BaseModel):
+                _reject_lone_surrogates(value)
+        _reject_lone_surrogates(self.__pydantic_extra__ or {})
+        return self
+
 
 class ToolCallFunction(_Model):
-    name: str
+    name: str = Field(max_length=256)
     arguments: str = ""
 
 
 class ToolCall(_Model):
     model_config = ConfigDict(extra="allow")
-    id: str
-    type: str = "function"
+    id: str = Field(max_length=256)
+    type: str = Field("function", max_length=64)
     function: ToolCallFunction
 
 
@@ -48,7 +75,7 @@ class ContentPart(_Model):
     """One part of a multi-part message. Text parts may be optimized; others never are."""
 
     model_config = ConfigDict(extra="allow")
-    type: str
+    type: str = Field(max_length=64)
     text: str | None = None
 
 
@@ -56,9 +83,9 @@ class Message(_Model):
     model_config = ConfigDict(extra="allow")
     role: Role
     content: str | list[ContentPart] | None = None
-    name: str | None = None
+    name: str | None = Field(None, max_length=256)
     tool_calls: list[ToolCall] | None = None
-    tool_call_id: str | None = None
+    tool_call_id: str | None = Field(None, max_length=256)
 
     @model_serializer(mode="wrap")
     def _omit_unset(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:

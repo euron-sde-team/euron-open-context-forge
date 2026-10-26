@@ -17,9 +17,10 @@ from contextforge.benchmark_runs.router import router as benchmarks_router
 from contextforge.context.router import router as context_router
 from contextforge.core.config import Settings, get_settings
 from contextforge.core.container import Container
+from contextforge.core.db import import_all_models
 from contextforge.core.errors import install_error_handlers
 from contextforge.core.logs import configure_logging
-from contextforge.core.middleware import RequestContextMiddleware
+from contextforge.core.middleware import BodySizeLimitMiddleware, RequestContextMiddleware
 from contextforge.core.tracing import configure_tracing
 from contextforge.engine.tokenizers import warm_up
 from contextforge.gateway.router import router as gateway_router
@@ -47,6 +48,7 @@ task-critical fact, with real before and after token counts, warnings and a per-
 
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
     settings = settings or get_settings()
+    import_all_models()
     configure_logging(settings.log_level)
     configure_tracing(settings)
 
@@ -116,5 +118,6 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         ],
         max_age=600,
     )
+    app.add_middleware(BodySizeLimitMiddleware, settings=settings)
     app.add_middleware(RequestContextMiddleware)
     return app

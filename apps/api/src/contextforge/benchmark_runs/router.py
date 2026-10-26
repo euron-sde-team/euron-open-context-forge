@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Query, Response
-from sqlalchemy import select
 
 from contextforge.auth.dependencies import Admin, Viewer
 from contextforge.benchmark_runs import service
@@ -24,8 +23,7 @@ router = APIRouter(prefix="/api/v1/benchmarks", tags=["benchmarks"])
 async def list_runs(
     _: Viewer, session: SessionDep, limit: int = Query(20, ge=1, le=100)
 ) -> list[BenchmarkRun]:
-    stmt = select(BenchmarkRun).order_by(BenchmarkRun.created_at.desc()).limit(limit)
-    return list((await session.scalars(stmt)).all())
+    return await service.list_runs(session, limit)
 
 
 @router.post(

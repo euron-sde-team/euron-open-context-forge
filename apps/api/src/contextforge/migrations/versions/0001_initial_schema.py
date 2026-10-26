@@ -1,6 +1,6 @@
 """initial schema
 
-Revision ID: 0001
+Revision ID: 160f0a778a3a (file name 0001: the first revision)
 Revises:
 Create Date: 2026-10-24 00:31:50.720098
 

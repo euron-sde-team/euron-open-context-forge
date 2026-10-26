@@ -290,29 +290,6 @@ async def _traffic(api_url: str, created: Created, n: int) -> dict[str, int]:
         async def count(label: str, resp: httpx.Response) -> None:
             stats[f"{label}:{resp.status_code}"] = stats.get(f"{label}:{resp.status_code}", 0) + 1
 
-        for i in range(n):
-            case = cases[i % len(cases)]
-            key = {
-                "support": "Support assistant",
-                "rag": "Docs search",
-                "research": "Research desk",
-            }.get(case.workload, "Coding agent")
-            body = {
-                "model": case.model,
-                "messages": [m.model_dump(exclude_none=True) for m in case.messages],
-                "documents": [d.model_dump(exclude_none=True) for d in case.documents],
-                "options": {
-                    "max_input_tokens": int(case.max_input_tokens * rng.choice([1.0, 1.2, 1.5]))
-                },
-            }
-            await count(
-                "optimize", await client.post("/v1/context/optimize", json=body, headers=auth(key))
-            )
-        # The same request again: a result cache hit.
-        await count(
-            "optimize-repeat",
-            await client.post("/v1/context/optimize", json=body, headers=auth(key)),
-        )
         # Background jobs for the largest samples.
         for case in sorted(cases, key=lambda c: -len(c.messages))[:3]:
             body = {
@@ -348,11 +325,39 @@ async def _traffic(api_url: str, created: Created, n: int) -> dict[str, int]:
                 json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]},
             ),
         )
+        # Direct optimizations last, so the newest runs in the dashboard are the real ones.
+        for i in range(n):
+            case = cases[i % len(cases)]
+            key = {
+                "support": "Support assistant",
+                "rag": "Docs search",
+                "research": "Research desk",
+            }.get(case.workload, "Coding agent")
+            body = {
+                "model": case.model,
+                "messages": [m.model_dump(exclude_none=True) for m in case.messages],
+                "documents": [d.model_dump(exclude_none=True) for d in case.documents],
+                "options": {
+                    "max_input_tokens": int(case.max_input_tokens * rng.choice([1.0, 1.2, 1.5]))
+                },
+            }
+            await count(
+                "optimize", await client.post("/v1/context/optimize", json=body, headers=auth(key))
+            )
+        # The same request again: a result cache hit.
+        await count(
+            "optimize-repeat",
+            await client.post("/v1/context/optimize", json=body, headers=auth(key)),
+        )
     return stats
 
 
 async def run(days: int = 60, traffic: int = 40, api_url: str = "http://localhost:4330") -> None:
     settings = get_settings()
+    if settings.environment == "production":
+        raise SystemExit(
+            "seed-demo creates well-known demo credentials and refuses ENVIRONMENT=production"
+        )
     password = (
         os.environ.get("DEMO_PASSWORD") or os.environ.get("CF_DEMO_PASSWORD") or "ForgeDemo2026"
     )

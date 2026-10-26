@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import math
 import re
+import threading
+from collections import OrderedDict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -24,6 +26,10 @@ import orjson
 import tiktoken
 
 from contextforge.engine.types import Document, Message
+
+# Bounded count cache: at most CACHE_MAX_ENTRIES strings of CACHE_MAX_CHARS each (~16 MB).
+CACHE_MAX_CHARS = 2048
+CACHE_MAX_ENTRIES = 8192
 
 # Per-message framing (role markers, separators) and reply priming, following OpenAI's
 # published counting recipe for chat models.
@@ -66,19 +72,29 @@ class TiktokenTokenizer:
         self._factor = factor
         self.exact = exact
         self.id = encoding if factor == 1.0 else f"estimate:{encoding}*{factor:g}"
-        self._cache: dict[str, int] = {}
+        self._cache: OrderedDict[str, int] = OrderedDict()
+        self._lock = threading.Lock()
 
     def count(self, text: str) -> int:
         if not text:
             return 0
-        hit = self._cache.get(text)
-        if hit is not None:
-            return hit
+        # Only short, frequently repeated strings (roles, separators, small messages) are
+        # cached, in a bounded LRU: large user content is never retained in memory.
+        cacheable = len(text) <= CACHE_MAX_CHARS
+        if cacheable:
+            with self._lock:
+                hit = self._cache.get(text)
+                if hit is not None:
+                    self._cache.move_to_end(text)
+                    return hit
         n = len(self._enc.encode(text, disallowed_special=()))
         if self._factor != 1.0:
             n = math.ceil(n * self._factor)
-        if len(self._cache) < 50_000:
-            self._cache[text] = n
+        if cacheable:
+            with self._lock:
+                self._cache[text] = n
+                if len(self._cache) > CACHE_MAX_ENTRIES:
+                    self._cache.popitem(last=False)
         return n
 
 

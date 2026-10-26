@@ -198,7 +198,7 @@ def looks_like_json(text: str) -> bool:
 
     try:
         value = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
         return False
     return isinstance(value, (dict, list))
 
@@ -266,7 +266,8 @@ def normalize(text: str, *, fuzzy_numbers: bool = False) -> str:
 
 
 def digest(text: str) -> str:
-    return hashlib.blake2b(text.encode(), digest_size=16).hexdigest()
+    # surrogatepass: a lone surrogate (valid JSON, invalid UTF-8) must not crash hashing.
+    return hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=16).hexdigest()
 
 
 def shingles(text: str, size: int = 5) -> set[int]:

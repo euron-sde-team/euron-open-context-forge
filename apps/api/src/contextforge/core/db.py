@@ -42,6 +42,9 @@ class Database:
             max_overflow=max_overflow,
             pool_pre_ping=True,
             pool_recycle=1800,
+            # Never echo bound values (password hashes, key hashes, content) into an
+            # exception message, and so never into a log line.
+            hide_parameters=True,
         )
         self.sessionmaker = async_sessionmaker(self.engine, expire_on_commit=False)
 
@@ -56,6 +59,7 @@ class Database:
 def import_all_models() -> None:
     """Import every domain's models so Base.metadata is complete (Alembic, tests)."""
     from contextforge.audit import models as _audit  # noqa: F401
+    from contextforge.auth import models as _auth  # noqa: F401
     from contextforge.benchmark_runs import models as _benchmark_runs  # noqa: F401
     from contextforge.jobs import models as _jobs  # noqa: F401
     from contextforge.keys import models as _keys  # noqa: F401

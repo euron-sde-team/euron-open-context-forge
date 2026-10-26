@@ -118,6 +118,15 @@ async def delete(session: AsyncSession, name: str, actor: Actor) -> None:
         if name in BUILTIN_PROFILES:
             return
         raise NotFoundError("Profile not found")
+    if name not in BUILTIN_PROFILES:  # a reset built-in still exists afterwards
+        from contextforge.keys import service as key_service
+
+        if users := await key_service.names_using(session, profile=name):
+            raise ConflictError(
+                f"Keys still default to this profile: {', '.join(users)}. Change them first",
+                code="profile_in_use",
+                details={"keys": users},
+            )
     await session.delete(row)
     audit(
         session,
@@ -127,3 +136,12 @@ async def delete(session: AsyncSession, name: str, actor: Actor) -> None:
         name,
     )
     await session.commit()
+
+
+async def exists(session: AsyncSession, name: str) -> bool:
+    if name in BUILTIN_PROFILES:
+        return True
+    return (
+        await session.scalar(select(WorkloadProfile.name).where(WorkloadProfile.name == name))
+        is not None
+    )

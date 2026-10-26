@@ -5,14 +5,16 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contextforge.audit.service import Actor, audit
-from contextforge.core.errors import NotFoundError
+from contextforge.core.errors import AppError, NotFoundError
 from contextforge.core.security import generate_api_key
 from contextforge.keys.models import ApiKey
 from contextforge.keys.schemas import KeyCreated, KeyIn, KeyOut, KeyUpdate
+from contextforge.profiles import service as profile_service
+from contextforge.upstreams import service as upstream_service
 
 
 def to_out(key: ApiKey) -> KeyOut:
@@ -39,6 +41,7 @@ async def list_keys(session: AsyncSession, include_revoked: bool) -> list[KeyOut
 
 
 async def create_key(session: AsyncSession, data: KeyIn, pepper: str, actor: Actor) -> KeyCreated:
+    await _check_defaults(session, data.default_profile, data.default_upstream)
     generated = generate_api_key(pepper)
     key = ApiKey(
         **data.model_dump(),
@@ -61,6 +64,7 @@ async def update_key(
     if key is None:
         raise NotFoundError("API key not found")
     changes = data.model_dump(exclude_unset=True)
+    await _check_defaults(session, changes.get("default_profile"), changes.get("default_upstream"))
     for field, value in changes.items():
         setattr(key, field, value)
     audit(
@@ -84,3 +88,30 @@ async def revoke_key(session: AsyncSession, key_id: uuid.UUID, actor: Actor) -> 
         audit(session, actor, "api_key.revoked", "api_key", key.id, name=key.name)
         await session.commit()
     return to_out(key)
+
+
+async def count_active(session: AsyncSession) -> int:
+    """Keys that are not revoked (expired keys included: they may be renewed)."""
+    stmt = select(func.count()).select_from(ApiKey).where(ApiKey.revoked_at.is_(None))
+    return int(await session.scalar(stmt) or 0)
+
+
+async def _check_defaults(session: AsyncSession, profile: str | None, upstream: str | None) -> None:
+    """A key's defaults must name a profile and an upstream that exist; otherwise every
+    request made with the key would fail later instead of this write failing now."""
+    if profile and not await profile_service.exists(session, profile):
+        raise AppError(f"There is no profile named {profile!r}", code="unknown_profile")
+    if upstream and not await upstream_service.exists(session, upstream):
+        raise AppError(f"There is no upstream named {upstream!r}", code="unknown_upstream")
+
+
+async def names_using(
+    session: AsyncSession, *, profile: str | None = None, upstream: str | None = None
+) -> list[str]:
+    """Active keys whose defaults point at this profile or upstream."""
+    stmt = select(ApiKey.name).where(ApiKey.revoked_at.is_(None))
+    if profile is not None:
+        stmt = stmt.where(ApiKey.default_profile == profile)
+    if upstream is not None:
+        stmt = stmt.where(ApiKey.default_upstream == upstream)
+    return list((await session.scalars(stmt.order_by(ApiKey.name))).all())

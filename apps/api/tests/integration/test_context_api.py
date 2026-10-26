@@ -357,3 +357,18 @@ async def test_payload_too_large(api: Api, world: World) -> None:
         assert resp.json()["error"]["code"] == "payload_too_large"
     finally:
         api.app.state.container.settings.max_body_bytes = 32_000_000
+
+
+async def test_proxy_and_playground_also_enforce_the_body_limit(api: Api, world: World) -> None:
+    api.app.state.container.settings.max_body_bytes = 1000
+    try:
+        resp = await api.v1(
+            world.key, "/v1/chat/completions", {"model": "gpt-4o", "messages": support_thread()}
+        )
+        assert resp.status_code == 413
+        resp = await api.client.post(
+            "/api/v1/playground/optimize", json=optimize_body(support_thread())
+        )
+        assert resp.status_code == 413
+    finally:
+        api.app.state.container.settings.max_body_bytes = 32_000_000

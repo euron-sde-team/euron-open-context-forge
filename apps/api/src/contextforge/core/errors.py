@@ -13,7 +13,11 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from contextforge.core.storage import ObjectNotFoundError
 
 log = logging.getLogger("contextforge.errors")
 
@@ -84,15 +88,22 @@ class BudgetUnsatisfiableError(AppError):
     type = "budget_error"
 
 
-class PayloadTooLargeError(AppError):
-    status_code = 413
-    code = "payload_too_large"
+class GoneError(AppError):
+    status_code = 410
+    code = "gone"
 
 
 class RateLimitedError(AppError):
     status_code = 429
     code = "rate_limited"
     type = "rate_limit_error"
+
+
+class ServiceBusyError(AppError):
+    """Every engine slot in this process is busy; the caller should retry shortly."""
+
+    status_code = 503
+    code = "engine_busy"
 
 
 class UpstreamError(AppError):
@@ -104,12 +115,6 @@ class UpstreamError(AppError):
 class UpstreamTimeoutError(AppError):
     status_code = 504
     code = "upstream_timeout"
-    type = "api_error"
-
-
-class DependencyUnavailableError(AppError):
-    status_code = 503
-    code = "dependency_unavailable"
     type = "api_error"
 
 
@@ -128,6 +133,40 @@ def install_error_handlers(app: FastAPI) -> None:
         err.details = {"errors": errors}
         return JSONResponse(err.body(), status_code=422)
 
+    @app.exception_handler(ValidationError)
+    async def _model_validation(_: Request, exc: ValidationError) -> JSONResponse:
+        # Models built inside a handler (the proxy turns a chat body into an optimize
+        # request) fail the same way as a request body: 422, never 500.
+        errors = [
+            {"loc": list(e.get("loc", [])), "msg": e.get("msg", ""), "type": e.get("type", "")}
+            for e in exc.errors(include_url=False, include_input=False)
+        ]
+        err = AppError("Request validation failed", code="validation_error")
+        err.details = {"errors": errors}
+        return JSONResponse(err.body(), status_code=422)
+
+    @app.exception_handler(IntegrityError)
+    async def _integrity(request: Request, exc: IntegrityError) -> JSONResponse:
+        # A uniqueness or reference race the service-level check could not see (two
+        # requests creating the same email at once). The SQL is logged, never the values.
+        log.warning(
+            "integrity conflict",
+            extra={"path": request.url.path, "constraint": _constraint(exc)},
+        )
+        err = ConflictError(
+            "This conflicts with a change made at the same time. Reload and try again",
+            code="conflict",
+        )
+        return JSONResponse(err.body(), status_code=409)
+
+    @app.exception_handler(ObjectNotFoundError)
+    async def _expired(_: Request, exc: ObjectNotFoundError) -> JSONResponse:
+        err = GoneError(
+            "The stored object has expired under the bucket's retention policy",
+            code="content_expired",
+        )
+        return JSONResponse(err.body(), status_code=410)
+
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         err = AppError(str(exc.detail), code="http_error")
@@ -139,3 +178,8 @@ def install_error_handlers(app: FastAPI) -> None:
         err = AppError("Internal server error", code="internal_error")
         err.type = "api_error"
         return JSONResponse(err.body(), status_code=500)
+
+
+def _constraint(exc: IntegrityError) -> str | None:
+    diag = getattr(getattr(exc.orig, "__cause__", None), "constraint_name", None)
+    return diag or getattr(exc.orig, "constraint_name", None)

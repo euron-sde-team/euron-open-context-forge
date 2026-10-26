@@ -60,12 +60,16 @@ def test_cors_origins_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_tracing_is_a_no_op_until_enabled() -> None:
+    from opentelemetry import trace
+
     from contextforge.core import tracing
 
+    # Checked by identity, not by span recording: another test in the same process may
+    # have installed an SDK provider, which this must neither need nor replace.
+    before = trace.get_tracer_provider()
     tracing.configure_tracing(Settings())
     assert tracing._configured is False
-    with tracing.tracer.start_as_current_span("probe") as span:
-        assert not span.is_recording()
+    assert trace.get_tracer_provider() is before
 
 
 def test_redis_is_optional() -> None:

@@ -4,7 +4,7 @@ import yaml
 
 from contextforge.openapi import spec
 
-COMMITTED = Path(__file__).parents[4] / "docs" / "api" / "openapi.yaml"
+COMMITTED = Path(__file__).parents[5] / "docs" / "api" / "openapi.yaml"
 
 
 def test_committed_openapi_matches_the_app() -> None:

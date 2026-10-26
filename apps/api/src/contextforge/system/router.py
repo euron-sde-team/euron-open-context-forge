@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from sqlalchemy import func, select, text
+from sqlalchemy import text
 
 from contextforge import __version__
 from contextforge.auth.dependencies import Viewer
@@ -17,8 +17,8 @@ from contextforge.core.deps import ContainerDep, SessionDep
 from contextforge.core.schemas import ApiModel
 from contextforge.engine.profiles import BUILTIN_PROFILES
 from contextforge.engine.tokenizers import ENCODINGS
-from contextforge.keys.models import ApiKey
-from contextforge.upstreams.models import Upstream
+from contextforge.keys import service as key_service
+from contextforge.upstreams import service as upstream_service
 
 router = APIRouter(tags=["system"])
 
@@ -86,8 +86,8 @@ class SystemInfo(ApiModel):
 @router.get("/api/v1/system", response_model=SystemInfo, summary="Deployment configuration")
 async def system(_: Viewer, session: SessionDep, container: ContainerDep) -> SystemInfo:
     s = container.settings
-    upstreams = await session.scalar(select(func.count()).select_from(Upstream))
-    keys = await session.scalar(select(func.count()).where(ApiKey.revoked_at.is_(None)))
+    upstreams = await upstream_service.count(session)
+    keys = await key_service.count_active(session)
     checks: dict[str, Any] = {"postgres": {"ok": True}}
     if container.kv.backend == "redis":
         checks.update(dict([await _probe("redis", container.kv.ping())]))

@@ -44,6 +44,7 @@ from contextforge.engine.types import (
 GAP = "[...]"
 JOIN_COST = 2
 MIN_PARTIAL_TOKENS = 24
+EXTRACT_VERIFY_ROUNDS = 4
 MIN_SUMMARY_TOKENS = 32
 SUMMARY_FLOOR = 72
 MAX_REPAIR_ROUNDS = 8
@@ -115,19 +116,40 @@ def _extract(unit: Unit, limit: int, work: Work, scorer_query: str) -> tuple[str
             )
         ),
     )
+    # Each sentence is counted once (with its joining space) and the selection is costed
+    # arithmetically, then verified with one exact count. Re-counting the joined text per
+    # candidate was quadratic in the number of sentences.
+    cost = [work.tok.count(" " + s) for s in sentences]
+    gap = work.tok.count(" " + GAP)
+    target = limit - gap  # room for a trailing marker
     chosen: list[int] = []
-    for i in scored:
-        trial = sorted([*chosen, i])
-        text = _join_sentences(sentences, trial)
-        if work.tok.count(text) <= limit:
-            chosen = trial
-    if not chosen:
+    for _ in range(EXTRACT_VERIFY_ROUNDS):
+        picked: set[int] = set()
+        used = 0
+        for i in scored:
+            extra = cost[i] + _gap_delta(picked, i) * gap
+            if used + extra <= target:
+                picked.add(i)
+                used += extra
+        chosen = sorted(picked)
+        if not chosen:
+            return None
+        text = _join_sentences(sentences, chosen)
+        tokens = work.tok.count(text)
+        if tokens <= limit:
+            break
+        # The estimate ran over (token merges across joins): tighten and try again.
+        target -= tokens - limit + 1
+    else:
         return None
-    text = _join_sentences(sentences, chosen)
-    tokens = work.tok.count(text)
     if tokens >= unit.tokens * 0.9:
         return None
     return text, tokens
+
+
+def _gap_delta(picked: set[int], i: int) -> int:
+    """Upper bound on the gap markers adding sentence ``i`` costs: one unless it extends a run."""
+    return 0 if (i - 1 in picked or i + 1 in picked) else 1
 
 
 def _join_sentences(sentences: list[str], idx: list[int]) -> str:

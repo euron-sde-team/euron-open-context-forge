@@ -19,6 +19,7 @@ Response headers: x-contextforge-original-tokens, -optimized-tokens, -reduction-
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -35,16 +36,19 @@ from contextforge.context.service import Caller, ContextService, UpstreamInfo
 from contextforge.core.container import Container
 from contextforge.core.deps import ContainerDep
 from contextforge.core.errors import AppError, UpstreamError, UpstreamTimeoutError
+from contextforge.core.tracing import tracer
 from contextforge.engine.types import Message, OptimizeOptions, OptimizeRequest
 from contextforge.integrations.base import UpstreamAdapter
 from contextforge.integrations.registry import adapter_for
 from contextforge.keys.dependencies import KeyContext, ServiceKey
 from contextforge.observability import metrics
 from contextforge.upstreams import service as upstreams
+from contextforge.upstreams.schemas import NAME
 from contextforge.upstreams.service import ResolvedUpstream
 
 router = APIRouter(prefix="/v1", tags=["proxy"])
 log = logging.getLogger("contextforge.proxy")
+_NAME_RE = re.compile(NAME)
 _HOP = {"content-length", "transfer-encoding", "connection", "content-encoding", "keep-alive"}
 
 
@@ -60,6 +64,10 @@ async def _upstream(container: Container, request: Request, key: KeyContext) -> 
             "No upstream is configured. Add one in the dashboard (Upstreams) or set "
             "DEFAULT_UPSTREAM",
             code="no_upstream",
+        )
+    if not _NAME_RE.fullmatch(name):
+        raise AppError(
+            f"Upstream {name[:64]!r} does not exist or is disabled", code="unknown_upstream"
         )
     resolved = await upstreams.resolve(container, name)
     if resolved is None:
@@ -144,8 +152,9 @@ def _response_headers(
 
 @router.post("/chat/completions", summary="OpenAI-compatible: optimize, then forward upstream")
 async def chat_completions(request: Request, key: ServiceKey, container: ContainerDep) -> Response:
+    raw = await request.body()
     try:
-        body = orjson.loads(await request.body())
+        body = orjson.loads(raw)
     except orjson.JSONDecodeError as exc:
         raise AppError("The request body is not valid JSON", code="invalid_json") from exc
     if (
@@ -187,8 +196,14 @@ async def chat_completions(request: Request, key: ServiceKey, container: Contain
     payload = orjson.dumps(body)
     started = time.perf_counter()
     try:
-        upstream_req = container.http.build_request("POST", url, content=payload, headers=headers)
-        upstream = await container.http.send(upstream_req, stream=bool(body.get("stream")))
+        with tracer.start_as_current_span("proxy.upstream") as span:
+            span.set_attribute("contextforge.upstream", up.name)
+            span.set_attribute("contextforge.upstream_kind", up.kind)
+            upstream_req = container.http.build_request(
+                "POST", url, content=payload, headers=headers
+            )
+            upstream = await container.http.send(upstream_req, stream=bool(body.get("stream")))
+            span.set_attribute("http.response.status_code", upstream.status_code)
     except httpx.TimeoutException as exc:
         metrics.UPSTREAM_REQUESTS.labels(up.name, up.kind, "timeout").inc()
         raise UpstreamTimeoutError(f"Upstream {up.name} did not answer in time") from exc
@@ -205,23 +220,41 @@ async def chat_completions(request: Request, key: ServiceKey, container: Contain
         info = UpstreamInfo(up.name, rep.model, upstream.status_code, rep.cost_nusd)
         opt.run_id = await svc.record(optimized_req, opt, caller, info)
 
-    out_headers = _response_headers(upstream, adapter, opt)
     if body.get("stream") and upstream.status_code < 400:
-        await record(None)
+        try:
+            out_headers = _response_headers(upstream, adapter, opt)
+            await record(None)
+        except BaseException:
+            await upstream.aclose()
+            raise
         if opt is not None and opt.run_id is not None:
             out_headers["x-contextforge-run-id"] = str(opt.run_id)
 
         async def relay() -> AsyncIterator[bytes]:
-            async for chunk in upstream.aiter_raw():
-                yield chunk
+            # aiter_bytes decodes any content-encoding (stripped from the headers we send).
+            # The connection goes back to the pool whatever happens, and a stream that
+            # breaks half way is logged and counted instead of ending silently.
+            try:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+            except httpx.HTTPError as exc:
+                metrics.UPSTREAM_REQUESTS.labels(up.name, up.kind, "stream_error").inc()
+                log.warning(
+                    "upstream stream broke",
+                    extra={"upstream": up.name, "error": type(exc).__name__},
+                )
+            finally:
+                await upstream.aclose()
 
         return StreamingResponse(
             relay(),
             status_code=upstream.status_code,
             headers=out_headers,
             media_type=upstream.headers.get("content-type", "text/event-stream"),
+            # Also closes when the client leaves before the body starts (aclose is idempotent).
             background=BackgroundTask(upstream.aclose),
         )
+    out_headers = _response_headers(upstream, adapter, opt)
     content = await upstream.aread()
     await upstream.aclose()
     try:

@@ -129,3 +129,21 @@ async def test_key_update_changes_defaults(api: Api, world: World) -> None:
             "/api/v1/keys/00000000-0000-0000-0000-000000000000", json={"name": "x"}
         )
     ).status_code == 404
+
+
+async def test_expired_job_result_is_gone_not_an_error(api: Api, world: World) -> None:
+    job_id = (await api.v1(world.key, "/v1/context/jobs", optimize_body(coding_trace(2)))).json()[
+        "id"
+    ]
+    container = api.app.state.container
+    await jobs.run_once(container)
+    async with container.db.sessionmaker() as s:
+        row = await s.get(Job, job_id)
+        assert row is not None
+        row.result_key = f"jobs/{job_id}/expired.json"  # what the bucket lifecycle leaves behind
+        await s.commit()
+    async with api.anonymous() as c:
+        resp = await c.get(
+            f"/v1/context/jobs/{job_id}", headers={"authorization": f"Bearer {world.key}"}
+        )
+    assert resp.status_code == 410 and resp.json()["error"]["code"] == "job_result_expired"

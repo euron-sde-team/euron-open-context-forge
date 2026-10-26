@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contextforge.audit.models import AuditLog
@@ -39,3 +40,16 @@ def audit(
             ip=actor.ip,
         )
     )
+
+
+async def list_entries(
+    session: AsyncSession, after_id: int | None, limit: int, action: str | None
+) -> list[AuditLog]:
+    """Newest first, keyset-paginated on id; ``limit + 1`` rows so the caller can tell
+    whether another page exists. ``action`` filters by prefix (``user.`` matches all)."""
+    stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit + 1)
+    if after_id is not None:
+        stmt = stmt.where(AuditLog.id < after_id)
+    if action:
+        stmt = stmt.where(AuditLog.action.startswith(action))
+    return list((await session.scalars(stmt)).all())

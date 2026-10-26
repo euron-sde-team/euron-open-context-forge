@@ -1,7 +1,7 @@
 """Context service: the engine behind the HTTP API, with caching, recording and metrics.
 
 The engine is CPU bound and synchronous, so it runs in a worker thread
-(``asyncio.to_thread``) and never blocks the event loop. Around it:
+(the engine's own bounded thread pool) and never blocks the event loop. Around it:
 
 * the **result cache** (Redis, or in-process without Redis) answers an identical request,
   with the same profiles and settings, without running the pipeline again;
@@ -13,13 +13,17 @@ The engine is CPU bound and synchronous, so it runs in a worker thread
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import functools
 import hashlib
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TypeVar
 
 import orjson
 from redis.exceptions import RedisError
@@ -38,14 +42,17 @@ from contextforge.core.container import Container
 from contextforge.core.errors import (
     AppError,
     BudgetUnsatisfiableError,
+    ServiceBusyError,
     UnsupportedTokenizerError,
 )
 from contextforge.core.logs import request_id_var
 from contextforge.core.money import tokens_cost_nusd
+from contextforge.core.tracing import tracer
 from contextforge.engine import pipeline
 from contextforge.engine import tokenizers as tk
 from contextforge.engine.bm25 import BM25
 from contextforge.engine.profiles import Profile
+from contextforge.engine.stages import NEAR_DUP_MAX_DOCS
 from contextforge.engine.summarizer import (
     ExtractiveSummarizer,
     Summarizer,
@@ -74,6 +81,7 @@ from contextforge.profiles import service as profiles
 from contextforge.runs import service as runs
 from contextforge.runs.models import OptimizationRun
 
+T = TypeVar("T")
 log = logging.getLogger("contextforge.context")
 CACHE_PREFIX = "cf:res:"
 
@@ -101,15 +109,20 @@ class _UnconfiguredLLM:
         return out
 
 
-def price_per_million(container: Container, model: str) -> Decimal | None:
+def model_family(container: Container, model: str) -> str:
+    """The known price family a model belongs to, or "other" (a bounded label set)."""
     prices = container.settings.model_prices
     name = model.strip().lower()
     name = name.split("/", 1)[1] if "/" in name else name
     if name in prices:
-        return prices[name]
-    # Longest known prefix: "gpt-4o-2024-08-06" prices as "gpt-4o".
+        return name
+    # Longest known prefix: "gpt-4o-2024-08-06" belongs to "gpt-4o".
     matches = [k for k in prices if name.startswith(k)]
-    return prices[max(matches, key=len)] if matches else None
+    return max(matches, key=len) if matches else "other"
+
+
+def price_per_million(container: Container, model: str) -> Decimal | None:
+    return container.settings.model_prices.get(model_family(container, model))
 
 
 def _summarizer(container: Container, kind: str) -> Summarizer:
@@ -119,7 +132,11 @@ def _summarizer(container: Container, kind: str) -> Summarizer:
     if not s.llm_summarizer_url:
         return _UnconfiguredLLM()
     return LLMSummarizer(
-        s.llm_summarizer_url, s.llm_summarizer_model, s.llm_summarizer_api_key, s.llm_timeout_s
+        s.llm_summarizer_url,
+        s.llm_summarizer_model,
+        s.llm_summarizer_api_key,
+        s.llm_timeout_s,
+        client=container.llm_http,
     )
 
 
@@ -163,8 +180,14 @@ class ContextService:
         if raw is None:
             metrics.RESULT_CACHE.labels("miss").inc()
             return None
+        try:
+            resp = OptimizeResponse.model_validate_json(raw)
+        except ValueError:
+            # Written by another version during a rolling deploy: recompute, never fail.
+            metrics.RESULT_CACHE.labels("miss").inc()
+            return None
         metrics.RESULT_CACHE.labels("hit").inc()
-        return OptimizeResponse.model_validate_json(raw)
+        return resp
 
     async def _cache_set(self, key: str, resp: OptimizeResponse) -> None:
         raw = resp.model_dump_json(exclude={"run_id", "cached"}).encode()
@@ -175,15 +198,41 @@ class ContextService:
         except (RedisError, OSError):
             metrics.DEPENDENCY_ERRORS.labels("redis", "cache_set").inc()
 
+    async def cpu(self, fn: Callable[[], T]) -> T:
+        """Run CPU-bound engine work (optimize, count, summarize, rank) on the engine's own
+        bounded pool, at most ``ENGINE_CONCURRENCY`` at once per process.
+
+        A request waits up to ``ENGINE_QUEUE_TIMEOUT_S`` for a slot, then gets 503
+        ``engine_busy``. The pool is separate from the default executor, so a burst of
+        large inputs cannot delay sign-in hashing or storage calls.
+        """
+        slots = self.c.engine_slots
+        try:
+            await asyncio.wait_for(slots.acquire(), self.c.settings.engine_queue_timeout_s)
+        except TimeoutError:
+            metrics.ENGINE_BUSY.inc()
+            raise ServiceBusyError(
+                "Every optimization slot on this instance is busy. Retry in a few seconds",
+                headers={"Retry-After": "2"},
+            ) from None
+        ctx = contextvars.copy_context()  # keep the request id and trace span in the thread
+        future = asyncio.get_running_loop().run_in_executor(self.c.engine_pool, ctx.run, fn)
+        # The slot is released when the thread finishes, not when the request goes away:
+        # a cancelled request must not free a slot whose CPU work is still running.
+        future.add_done_callback(lambda _: slots.release())
+        return await asyncio.shield(future)
+
     async def run_engine(self, req: OptimizeRequest, table: dict[str, Profile]) -> OptimizeResult:
         summarizer = _summarizer(self.c, req.options.summarizer)
         try:
-            return await asyncio.to_thread(
-                pipeline.optimize,
-                req,
-                registry=self.c.tokenizers,
-                profiles=table,
-                summarizer=summarizer,
+            return await self.cpu(
+                functools.partial(
+                    pipeline.optimize,
+                    req,
+                    registry=self.c.tokenizers,
+                    profiles=table,
+                    summarizer=summarizer,
+                )
             )
         except tk.UnsupportedTokenizerError as exc:
             raise UnsupportedTokenizerError(
@@ -240,21 +289,33 @@ class ContextService:
         use_cache: bool = True,
     ) -> OptimizeResponse:
         started = time.perf_counter()
-        req, table, profile = await self._prepare(req, caller)
-        key = self._cache_key(req)
-        resp = await self._cache_get(key) if use_cache else None
-        if resp is not None:
-            resp.cached = True
-            resp.stats.latency_ms = round((time.perf_counter() - started) * 1000, 3)
-        else:
-            result = await self.run_engine(req, table)
-            resp = self._response(req, result, profile)
-            if use_cache:
-                await self._cache_set(key, resp)
-        self._observe(resp, caller.source)
-        if record:
-            resp.run_id = await self.record(req, resp, caller, upstream)
-        return resp
+        with tracer.start_as_current_span("context.optimize") as span:
+            span.set_attribute("contextforge.source", caller.source)
+            span.set_attribute("contextforge.messages_in", len(req.messages))
+            span.set_attribute("contextforge.documents_in", len(req.documents))
+            req, table, profile = await self._prepare(req, caller)
+            key = self._cache_key(req)
+            with tracer.start_as_current_span("context.cache_lookup"):
+                resp = await self._cache_get(key) if use_cache else None
+            if resp is not None:
+                resp.cached = True
+                resp.stats.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+            else:
+                with tracer.start_as_current_span("context.engine"):
+                    result = await self.run_engine(req, table)
+                resp = self._response(req, result, profile)
+                if use_cache:
+                    await self._cache_set(key, resp)
+            span.set_attribute("contextforge.cache_hit", resp.cached)
+            span.set_attribute("contextforge.workload", resp.workload)
+            span.set_attribute("contextforge.tokens_before", resp.stats.original_tokens)
+            span.set_attribute("contextforge.tokens_after", resp.stats.optimized_tokens)
+            span.set_attribute("contextforge.budget_met", resp.stats.budget_met)
+            self._observe(resp, caller.source)
+            if record:
+                with tracer.start_as_current_span("context.record"):
+                    resp.run_id = await self.record(req, resp, caller, upstream)
+            return resp
 
     def _observe(self, resp: OptimizeResponse, source: str) -> None:
         s = resp.stats
@@ -269,6 +330,18 @@ class ContextService:
         metrics.FACT_RETENTION.observe(s.fact_retention)
         for w in resp.warnings:
             metrics.WARNINGS.labels(w.code).inc()
+        if not s.budget_met:
+            # One structured line per miss: the CloudWatch metric filter in the
+            # observability module counts these ({ $.event = "budget_not_met" }).
+            log.info(
+                "budget not met",
+                extra={
+                    "event": "budget_not_met",
+                    "source": source,
+                    "budget": s.budget,
+                    "optimized_tokens": s.optimized_tokens,
+                },
+            )
         if not resp.cached:
             for step in resp.trace:
                 metrics.STAGE_SECONDS.labels(step.stage).observe(step.ms / 1000)
@@ -305,7 +378,7 @@ class ContextService:
             request_id=request_id_var.get(),
             source=caller.source,
             key_id=caller.key.id if caller.key else None,
-            key_name=caller.key.name if caller.key else None,
+            key_name=caller.key.name[:120] if caller.key else None,
             model=req.model[:200],
             tokenizer=resp.tokenizer.id[:64],
             exact=resp.tokenizer.exact,
@@ -330,7 +403,7 @@ class ContextService:
             if price is not None
             else None,
             upstream=upstream.name if upstream else None,
-            upstream_model=upstream.model if upstream else None,
+            upstream_model=upstream.model[:200] if upstream and upstream.model else None,
             upstream_status=upstream.status if upstream else None,
             upstream_cost_nusd=upstream.cost_nusd if upstream else None,
             summary_tokens=summary_tokens,
@@ -340,7 +413,7 @@ class ContextService:
         )
         try:
             async with self.c.db.sessionmaker() as session:
-                return await runs.record(session, run)
+                return await runs.record(session, run, rollup_model=model_family(self.c, req.model))
         except Exception:
             # The caller already has its optimized context; a lost history row must not
             # turn a correct answer into an error. It is logged and counted instead.
@@ -377,7 +450,7 @@ class ContextService:
                 per_document=per_doc,
             )
 
-        return await asyncio.to_thread(work)
+        return await self.cpu(work)
 
     async def summarize(self, req: SummarizeRequest) -> SummarizeResponse:
         tok = self._tokenizer(req.model, req.allow_estimate)
@@ -439,7 +512,7 @@ class ContextService:
                 warnings=warnings,
             )
 
-        return await asyncio.to_thread(work)
+        return await self.cpu(work)
 
     async def rank(self, req: RankRequest) -> RankResponse:
         tok = self._tokenizer(req.model, req.allow_estimate)
@@ -478,13 +551,17 @@ class ContextService:
                     if h in seen:
                         dropped.append(p.model_copy(update={"duplicate_of": seen[h]}))
                         continue
-                    sig = shingles(d.text)
-                    dup = next((pid for pid, s in sigs if jaccard(sig, s) >= 0.85), None)
-                    if dup:
-                        dropped.append(p.model_copy(update={"duplicate_of": dup}))
-                        continue
                     seen[h] = d.id
-                    sigs.append((d.id, sig))
+                    # Near-duplicate checks are pairwise, so only the first
+                    # NEAR_DUP_MAX_DOCS kept passages get one (exact dedup covers the rest).
+                    if len(sigs) < NEAR_DUP_MAX_DOCS:
+                        sig = shingles(d.text)
+                        dup = next((pid for pid, s in sigs if jaccard(sig, s) >= 0.85), None)
+                        if dup:
+                            del seen[h]
+                            dropped.append(p.model_copy(update={"duplicate_of": dup}))
+                            continue
+                        sigs.append((d.id, sig))
                 if p.relevance == 0.0:
                     dropped.append(p)
                     continue
@@ -504,4 +581,4 @@ class ContextService:
                 tokens_selected=used,
             )
 
-        return await asyncio.to_thread(work)
+        return await self.cpu(work)

@@ -29,6 +29,7 @@ _SIGNAL = re.compile(
     re.IGNORECASE,
 )
 _FRAME = re.compile(r'^\s*(File "|at [\w$.<>]+\()')
+MAX_JSON_DEPTH = 64
 _ALWAYS_KEEP_KEYS = {"error", "errors", "message", "status", "code", "id", "name", "type", "detail"}
 
 
@@ -63,14 +64,20 @@ def reduce_output(text: str, level: ReductionLevel, query_terms: set[str]) -> st
     if stripped[:1] in "[{":
         try:
             value = json.loads(stripped)
-        except ValueError:
+        except (ValueError, RecursionError):
             value = None
         if isinstance(value, (dict, list)):
-            reduced = json.dumps(
-                _reduce_json(value, level, query_terms, depth=0), ensure_ascii=False, indent=1
-            )
-            json.loads(reduced)  # invariant: the output is valid JSON
-            return reduced if len(reduced) < len(text) * 0.9 else None
+            try:
+                reduced = json.dumps(
+                    _reduce_json(value, level, query_terms, depth=0),
+                    ensure_ascii=False,
+                    indent=1,
+                )
+                json.loads(reduced)  # invariant: the output is valid JSON
+            except RecursionError:
+                reduced = ""  # pathologically deep: fall through to text reduction
+            if reduced:
+                return reduced if len(reduced) < len(text) * 0.9 else None
     lines = text.splitlines()
     if looks_like_code([ln for ln in lines if ln.strip()]):
         # A file read: cutting its middle breaks the code a later edit needs. Repeated
@@ -91,6 +98,8 @@ def _mentions(value: Any, query_terms: set[str]) -> bool:
 
 
 def _reduce_json(value: Any, level: ReductionLevel, query_terms: set[str], depth: int) -> Any:
+    if depth >= MAX_JSON_DEPTH and isinstance(value, (dict, list)):
+        return f"[ContextForge: nesting deeper than {MAX_JSON_DEPTH} levels omitted]"
     if isinstance(value, dict):
         return {
             k: (

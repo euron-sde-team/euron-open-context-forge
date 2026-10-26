@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -48,6 +49,8 @@ class SessionClaims:
     user_id: uuid.UUID
     role: str
     session_version: int
+    jti: str = ""
+    expires_at: datetime | None = None
 
 
 def issue_session(
@@ -69,7 +72,13 @@ def issue_session(
 def decode_session(token: str, secret: str) -> SessionClaims | None:
     try:
         data = jwt.decode(token, secret, algorithms=["HS256"], audience=SESSION_AUDIENCE)
-        return SessionClaims(uuid.UUID(data["sub"]), str(data["role"]), int(data.get("sv", 0)))
+        return SessionClaims(
+            uuid.UUID(data["sub"]),
+            str(data["role"]),
+            int(data.get("sv", 0)),
+            str(data.get("jti", "")),
+            datetime.fromtimestamp(int(data["exp"]), UTC),
+        )
     except (jwt.PyJWTError, KeyError, ValueError):
         return None
 
@@ -96,11 +105,16 @@ def generate_api_key(pepper: str) -> GeneratedKey:
     )
 
 
+_PREFIX_RE = re.compile(r"[0-9a-f]{12}")
+
+
 def parse_api_key(raw: str) -> tuple[str, str] | None:
     """Split ``cfk_<prefix>_<secret>`` into (prefix, secret); None if malformed."""
     parts = raw.split("_", 2)
-    if len(parts) != 3 or parts[0] != API_KEY_PREFIX or len(parts[1]) != 12 or not parts[2]:
+    if len(parts) != 3 or parts[0] != API_KEY_PREFIX or not parts[2]:
         return None
+    if not _PREFIX_RE.fullmatch(parts[1]):
+        return None  # prefixes are 12 hex chars; anything else never reaches the cache or DB
     return parts[1], parts[2]
 
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contextforge.audit.service import Actor, audit
@@ -23,13 +24,11 @@ async def authenticate(session: AsyncSession, email: str, password: str, ip: str
         raise AuthenticationError(
             "Too many failed attempts. Try again in a few minutes", code="account_locked"
         )
-    if not verify_password(password, user.password_hash if user else None) or user is None:
+    # Argon2 is deliberately slow: run it off the event loop.
+    ok = await asyncio.to_thread(verify_password, password, user.password_hash if user else None)
+    if not ok or user is None:
         if user is not None:
-            user.failed_logins += 1
-            if user.failed_logins >= MAX_FAILURES:
-                user.locked_until = now + LOCKOUT
-                user.failed_logins = 0
-            await session.commit()
+            await _record_failure(session, user, now, ip)
         raise AuthenticationError("Email or password is incorrect", code="invalid_credentials")
     if user.disabled:
         raise AuthenticationError("This account is disabled", code="account_disabled")
@@ -41,10 +40,30 @@ async def authenticate(session: AsyncSession, email: str, password: str, ip: str
     return user
 
 
+async def _record_failure(session: AsyncSession, user: User, now: datetime, ip: str | None) -> None:
+    """Count a failure atomically in SQL, so parallel attempts cannot share one count."""
+    failures = await session.scalar(
+        update(User)
+        .where(User.id == user.id)
+        .values(failed_logins=User.failed_logins + 1)
+        .returning(User.failed_logins)
+    )
+    locked = failures is not None and failures >= MAX_FAILURES
+    if locked:
+        await session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(locked_until=now + LOCKOUT, failed_logins=0)
+        )
+    actor = Actor(user.id, user.email, user.role, ip)
+    audit(session, actor, "auth.login_failed", "user", user.id, locked=locked)
+    await session.commit()
+
+
 async def change_password(
     session: AsyncSession, user: User, current: str, new: str, actor: Actor
 ) -> User:
-    if not verify_password(current, user.password_hash):
+    if not await asyncio.to_thread(verify_password, current, user.password_hash):
         raise AuthenticationError("Current password is incorrect", code="invalid_credentials")
     if problems := password_problems(new):
         raise AppError(
@@ -52,7 +71,7 @@ async def change_password(
             code="weak_password",
             details={"problems": problems},
         )
-    user.password_hash = hash_password(new)
+    user.password_hash = await asyncio.to_thread(hash_password, new)
     user.session_version += 1
     audit(session, actor, "auth.password_changed", "user", user.id)
     await session.commit()

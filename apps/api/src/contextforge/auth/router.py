@@ -3,14 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 from redis.exceptions import RedisError
 
-from contextforge.audit.service import Actor
+from contextforge.audit.service import Actor, audit
 from contextforge.auth import service
-from contextforge.auth.dependencies import SESSION_COOKIE, CurrentUser
+from contextforge.auth.dependencies import SESSION_COOKIE, CurrentUser, revoke, session_token
 from contextforge.auth.schemas import LoginRequest, PasswordChange, SessionOut, UserOut
 from contextforge.core.deps import ContainerDep, SessionDep, client_ip
 from contextforge.core.errors import RateLimitedError
 from contextforge.core.schemas import Ack
-from contextforge.core.security import issue_session
+from contextforge.core.security import decode_session, issue_session
 from contextforge.limits.limiter import LimitDecision
 from contextforge.users.models import User
 
@@ -61,11 +61,24 @@ async def login(
             headers={"retry-after": str(decision.retry_after_s)},
         )
     user = await service.authenticate(session, body.email, body.password, ip)
+    response.headers["cache-control"] = "no-store"
     return _session(response, container, user)
 
 
 @router.post("/logout", response_model=Ack, summary="Sign out")
-async def logout(response: Response) -> Ack:
+async def logout(
+    request: Request, response: Response, container: ContainerDep, session: SessionDep
+) -> Ack:
+    """Ends this session server-side too: the token is refused until it expires."""
+    token, _ = session_token(request)
+    claims = decode_session(token, container.settings.session_secret) if token else None
+    if claims is not None:
+        await revoke(session, claims)
+        user = await session.get(User, claims.user_id)
+        if user is not None:
+            actor = Actor(user.id, user.email, user.role, client_ip(request))
+            audit(session, actor, "auth.logout", "user", user.id)
+        await session.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
     return Ack(message="Signed out")
 

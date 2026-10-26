@@ -81,3 +81,45 @@ async def test_config_cache_ttl_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
     assert await cache.get("k", loader) == 1
     await asyncio.sleep(0.02)
     assert await cache.get("k", loader) == 2
+
+
+async def test_memory_kv_is_bounded_by_bytes() -> None:
+    kv = MemoryKV(max_entries=1000, max_bytes=10_000)
+    for i in range(10):
+        await kv.set(f"k{i}", b"x" * 3000, 60)
+    kept = [i for i in range(10) if await kv.get(f"k{i}") is not None]
+    assert kept == [7, 8, 9]  # oldest evicted first, total stays under the budget
+    await kv.set("huge", b"x" * 20_000, 60)  # larger than the whole budget: not cached
+    assert await kv.get("huge") is None
+    assert await kv.get("k9") is not None
+
+
+async def test_memory_kv_forgets_old_rate_windows() -> None:
+    kv = MemoryKV()
+    for i in range(10_050):
+        await kv.hit(f"ip:{i}", 10)
+    assert len(kv._windows) <= 10_050
+    kv._windows = dict.fromkeys(kv._windows, (0, 1))  # pretend every window is old
+    await kv.hit("fresh", 10)
+    assert set(kv._windows) == {"fresh"}
+
+
+async def test_config_cache_never_stores_a_load_that_raced_an_invalidation() -> None:
+    cache = ConfigCache(MemoryKV())
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_stale_load() -> str:
+        started.set()
+        await release.wait()
+        return "revoked key row (stale)"
+
+    task = asyncio.create_task(cache.get("key:abc", slow_stale_load))
+    await started.wait()
+    await cache.invalidate()  # the key was revoked while the load was in flight
+    release.set()
+    assert await task == "revoked key row (stale)"  # this caller gets what it loaded
+
+    async def fresh_load() -> str:
+        return "fresh"
+
+    assert await cache.get("key:abc", fresh_load) == "fresh"  # but it was not cached

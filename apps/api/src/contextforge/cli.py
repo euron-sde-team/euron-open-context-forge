@@ -21,7 +21,8 @@ def _serve(args: argparse.Namespace) -> None:
         port=args.port,
         workers=args.workers,
         proxy_headers=True,
-        forwarded_allow_ips="*",
+        # Only trust X-Forwarded-For from the load balancer's network (the VPC CIDR on AWS).
+        forwarded_allow_ips=os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1"),
         access_log=False,
         log_config=None,
         timeout_graceful_shutdown=30,
@@ -39,6 +40,12 @@ def _migrate(_: argparse.Namespace) -> None:
 
     upgrade(get_settings().database_url)
     print("migrations applied")
+
+
+def _revision(args: argparse.Namespace) -> None:
+    from contextforge.migrations.runner import revision
+
+    revision(get_settings().database_url, args.message)
 
 
 async def _create_owner(email: str, name: str, password: str) -> None:
@@ -111,11 +118,18 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("serve", help="run the API and gateway")
     p.add_argument("--host", default="0.0.0.0")  # noqa: S104 the container must listen on all interfaces
     p.add_argument("--port", type=int, default=int(os.environ.get("PORT", "4330")))
-    p.add_argument("--workers", type=int, default=int(os.environ.get("WEB_CONCURRENCY", "2")))
+    # One process per container by default: Prometheus counters and the in-process cache
+    # stay exact. Scale with more tasks or replicas, not more workers per task.
+    p.add_argument("--workers", type=int, default=int(os.environ.get("WEB_CONCURRENCY", "1")))
     p.set_defaults(fn=_serve)
 
     sub.add_parser("worker", help="run background jobs").set_defaults(fn=_worker)
     sub.add_parser("migrate", help="apply database migrations").set_defaults(fn=_migrate)
+    p = sub.add_parser(
+        "revision", help="autogenerate a new migration from the models (against a migrated DB)"
+    )
+    p.add_argument("-m", "--message", required=True)
+    p.set_defaults(fn=_revision)
     sub.add_parser("openapi", help="print the OpenAPI document as YAML").set_defaults(fn=_openapi)
 
     p = sub.add_parser("create-owner", help="create or reset an owner account")

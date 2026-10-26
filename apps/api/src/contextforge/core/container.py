@@ -6,7 +6,11 @@ factory re-entrant and lets tests build an isolated container per app.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime
 
 import httpx
 
@@ -38,21 +42,22 @@ class Container:
     sealer: KeySealer
     storage: ObjectStorage
     tokenizers: TokenizerRegistry
+    engine_slots: asyncio.Semaphore
+    engine_pool: ThreadPoolExecutor
+    llm_http: httpx.Client
+    # key id -> when this process last wrote its last_used_at (bounded by the key count).
+    key_touched: dict[uuid.UUID, datetime] = field(default_factory=dict)
 
     @classmethod
     def build(cls, settings: Settings) -> Container:
-        kv = create_kv(settings.redis_url)
+        kv = create_kv(settings.redis_url, settings.memory_cache_max_bytes)
         sealer: KeySealer = (
             KmsSealer(aws_client(settings, "kms"), settings.kms_key_id)
             if settings.key_mode == "kms"
             else LocalSealer(settings.local_master_key)
         )
         storage: ObjectStorage = (
-            S3Storage(
-                aws_client(settings, "s3"),
-                settings.payloads_bucket,
-                aws_client(settings, "s3", public=True),
-            )
+            S3Storage(aws_client(settings, "s3"), settings.payloads_bucket)
             if settings.storage == "s3"
             else LocalStorage(settings.local_storage_dir)
         )
@@ -69,9 +74,17 @@ class Container:
             sealer=sealer,
             storage=storage,
             tokenizers=TokenizerRegistry(settings.tokenizer_aliases),
+            engine_slots=asyncio.Semaphore(settings.engine_concurrency),
+            engine_pool=ThreadPoolExecutor(
+                max_workers=settings.engine_concurrency, thread_name_prefix="engine"
+            ),
+            # One pooled client for the optional LLM summarizer (called from engine threads).
+            llm_http=httpx.Client(timeout=httpx.Timeout(settings.llm_timeout_s, connect=5.0)),
         )
 
     async def close(self) -> None:
         await self.http.aclose()
+        self.llm_http.close()
+        self.engine_pool.shutdown(wait=False, cancel_futures=True)
         await self.kv.close()
         await self.db.dispose()

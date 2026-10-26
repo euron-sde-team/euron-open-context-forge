@@ -22,6 +22,7 @@ class BenchmarkRunOut(ApiModel):
     summary: list[MethodSummary]
     error: str | None
     created_at: datetime
+    started_at: datetime | None = None
     finished_at: datetime | None
 
 

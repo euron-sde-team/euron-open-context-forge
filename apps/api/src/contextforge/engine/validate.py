@@ -10,15 +10,6 @@ from contextforge.engine.types import CitationEntry, Document, Message
 _CITE = re.compile(r"\[([A-Za-z0-9_.:#/-]{1,200})\]")
 
 
-def tool_pairs(messages: list[Message]) -> dict[str, int]:
-    """tool_call_id -> index of the assistant message that issued it."""
-    pairs: dict[str, int] = {}
-    for i, m in enumerate(messages):
-        for call in m.tool_calls or []:
-            pairs[call.id] = i
-    return pairs
-
-
 def structure_problems(
     messages: list[Message], reference: list[Message] | None = None
 ) -> list[str]:

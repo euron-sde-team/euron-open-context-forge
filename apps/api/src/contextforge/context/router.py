@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Response
 
 from contextforge.context.schemas import (
     CountTokensRequest,
@@ -18,24 +18,12 @@ from contextforge.context.schemas import (
 )
 from contextforge.context.service import Caller, ContextService
 from contextforge.core.deps import ContainerDep
-from contextforge.core.errors import PayloadTooLargeError
 from contextforge.engine.types import OptimizeRequest
 from contextforge.jobs import service as jobs
 from contextforge.jobs.schemas import JobAccepted, JobOut
 from contextforge.keys.dependencies import ServiceKey
 
-
-async def body_limit(request: Request, container: ContainerDep) -> None:
-    length = request.headers.get("content-length")
-    limit = container.settings.max_body_bytes
-    if length and length.isdigit() and int(length) > limit:
-        raise PayloadTooLargeError(
-            f"The request body is larger than {limit:,} bytes. Split it, or raise MAX_BODY_BYTES",
-            details={"limit_bytes": limit},
-        )
-
-
-router = APIRouter(prefix="/v1/context", tags=["context"], dependencies=[Depends(body_limit)])
+router = APIRouter(prefix="/v1/context", tags=["context"])
 
 
 def _service(container: ContainerDep) -> ContextService:

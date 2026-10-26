@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Sequence
 
@@ -20,12 +21,12 @@ async def list_users(session: AsyncSession) -> Sequence[User]:
 
 
 async def _active_owners(session: AsyncSession) -> int:
-    return int(
-        await session.scalar(
-            select(func.count()).where(User.role == "owner", User.disabled.is_(False))
-        )
-        or 0
+    """Count active owners, locking their rows until commit so two owners demoting each
+    other at once cannot both pass the last-owner check."""
+    rows = await session.scalars(
+        select(User.id).where(User.role == "owner", User.disabled.is_(False)).with_for_update()
     )
+    return len(rows.all())
 
 
 async def create_user(session: AsyncSession, data: UserCreate, actor: Actor) -> User:
@@ -39,7 +40,7 @@ async def create_user(session: AsyncSession, data: UserCreate, actor: Actor) -> 
         email=data.email.lower(),
         name=data.name,
         role=data.role,
-        password_hash=hash_password(data.password),
+        password_hash=await asyncio.to_thread(hash_password, data.password),
     )
     session.add(user)
     await session.flush()

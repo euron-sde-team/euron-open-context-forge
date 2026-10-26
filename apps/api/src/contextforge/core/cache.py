@@ -20,6 +20,8 @@ from redis.exceptions import RedisError
 from contextforge.core.kv import KV
 
 T = TypeVar("T")
+# Keys come from request data (key prefixes, upstream names), so the cache is bounded.
+MAX_ENTRIES = 10_000
 VERSION_KEY = "cf:cfg:version"
 log = logging.getLogger("contextforge.cache")
 
@@ -33,6 +35,9 @@ class ConfigCache:
         self._locks: dict[str, asyncio.Lock] = {}
         self._version: bytes | None = None
         self._checked_at = 0.0
+        # Bumped on every clear: a load that started before an invalidation must not store
+        # its (possibly stale, e.g. a just-revoked key) value afterwards.
+        self._generation = 0
 
     @property
     def version(self) -> str:
@@ -48,7 +53,7 @@ class ConfigCache:
         except (RedisError, OSError):
             return  # without the stamp, fall back to TTL expiry only
         if version != self._version:
-            self._entries.clear()
+            self._clear()
             self._version = version
 
     async def get(self, key: str, loader: Callable[[], Awaitable[T]]) -> T:
@@ -57,17 +62,38 @@ class ConfigCache:
         if hit and hit[0] > time.monotonic():
             return hit[1]  # type: ignore[no-any-return]
         lock = self._locks.setdefault(key, asyncio.Lock())
-        async with lock:
-            hit = self._entries.get(key)
-            if hit and hit[0] > time.monotonic():
-                return hit[1]  # type: ignore[no-any-return]
-            value = await loader()
-            self._entries[key] = (time.monotonic() + self._ttl, value)
-            return value
+        try:
+            async with lock:
+                hit = self._entries.get(key)
+                if hit and hit[0] > time.monotonic():
+                    return hit[1]  # type: ignore[no-any-return]
+                generation = self._generation
+                value = await loader()
+                if generation == self._generation:
+                    self._store(key, value)
+                return value
+        finally:
+            # Drop the lock once nobody waits on it, so the lock table stays small.
+            if not lock.locked() and self._locks.get(key) is lock:
+                del self._locks[key]
+
+    def _clear(self) -> None:
+        self._entries.clear()
+        self._generation += 1
+
+    def _store(self, key: str, value: Any) -> None:
+        now = time.monotonic()
+        self._entries.pop(key, None)
+        if len(self._entries) >= MAX_ENTRIES:
+            for k in [k for k, (exp, _) in self._entries.items() if exp <= now]:
+                del self._entries[k]
+            while len(self._entries) >= MAX_ENTRIES:
+                del self._entries[next(iter(self._entries))]  # oldest insertion first
+        self._entries[key] = (now + self._ttl, value)
 
     async def invalidate(self) -> None:
         """Called after every configuration write."""
-        self._entries.clear()
+        self._clear()
         try:
             self._version = str(await self._kv.incr(VERSION_KEY)).encode()
             self._checked_at = time.monotonic()

@@ -46,4 +46,7 @@ UPSTREAM_REQUESTS = Counter(
 UPSTREAM_SECONDS = Histogram(
     "contextforge_upstream_seconds", "Upstream latency (time to headers)", ["upstream"]
 )
+ENGINE_BUSY = Counter(
+    "contextforge_engine_busy_total", "Requests refused because every engine slot was busy"
+)
 JOBS = Counter("contextforge_jobs_total", "Background jobs by final status", ["status"])

@@ -22,6 +22,7 @@ import asyncio
 import json
 import re
 import time
+import zlib
 from collections import Counter
 from typing import Any
 
@@ -167,6 +168,20 @@ async def _complete(request: Request, surface: str) -> Any:
             yield f"data: {json.dumps(done)}\n\n"
             yield "data: [DONE]\n\n"
 
+        if "gzip" in request.headers.get("accept-encoding", ""):
+            # Like real providers behind a CDN: compress the stream when the client allows it.
+
+            async def gzipped() -> Any:
+                packer = zlib.compressobj(wbits=31)  # gzip framing
+                async for event in events():
+                    yield packer.compress(event.encode()) + packer.flush(zlib.Z_SYNC_FLUSH)
+                yield packer.flush()
+
+            return StreamingResponse(
+                gzipped(),
+                media_type="text/event-stream",
+                headers={**headers, "content-encoding": "gzip"},
+            )
         return StreamingResponse(events(), media_type="text/event-stream", headers=headers)
     return JSONResponse(
         {
