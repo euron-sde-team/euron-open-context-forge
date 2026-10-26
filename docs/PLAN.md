@@ -153,8 +153,8 @@ checked by the fact guard.
 `optimization_runs` (append-only: source, model, tokenizer, exact, strategy, profile,
 tokens before and after, budget, budget_met, facts retained and total, citations, latency,
 warnings, trace, cost estimate, upstream cost), `run_rollups_hourly`, `jobs`
-(status, payload and result keys in object storage), `benchmark_runs`,
-`benchmark_results`, `audit_log` (append-only).
+(status, payload and result keys in object storage), `benchmark_runs` (summary and
+per-case results as JSONB), `audit_log` (append-only).
 
 ### API surface
 

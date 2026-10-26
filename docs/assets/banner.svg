@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="t d">
+  <title id="t">Euron Open ContextForge</title>
+  <desc id="d">Less context, fewer tokens, same intelligence: a self-hosted context optimization engine</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#140c07"/>
+      <stop offset="1" stop-color="#1d120b"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#c2410c"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ea580c" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.035"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="320" rx="16" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="16" fill="url(#grid)"/>
+
+  <g font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+    <text x="72" y="140" fill="#fbf1ea" font-size="54" font-weight="650" letter-spacing="-1.2">Euron Open ContextForge</text>
+    <text x="74" y="186" fill="#c9ab98" font-size="22" font-weight="400">Less context. Fewer tokens. Same intelligence.</text>
+    <text x="74" y="246" font-family="JetBrains Mono, SFMono-Regular, Menlo, monospace" font-size="15" fill="#a88a77" xml:space="preserve">exact tokenizers<tspan fill="#4a2f1f">  /  </tspan>facts kept verbatim<tspan fill="#4a2f1f">  /  </tspan>citations mapped<tspan fill="#4a2f1f">  /  </tspan>no model needed</text>
+  </g>
+
+  <!-- A long context enters, the forge removes duplicates and noise, a small context leaves -->
+  <g transform="translate(860 56)" font-family="JetBrains Mono, SFMono-Regular, Menlo, monospace" font-size="11">
+    <circle cx="170" cy="104" r="118" fill="url(#halo)"/>
+    <!-- incoming context: many bars -->
+    <rect x="0" y="34" width="110" height="10" rx="5" fill="#64748b" fill-opacity="0.9"/>
+    <rect x="0" y="52" width="96" height="10" rx="5" fill="#64748b" fill-opacity="0.75"/>
+    <rect x="0" y="70" width="110" height="10" rx="5" fill="#64748b" fill-opacity="0.9"/>
+    <rect x="0" y="88" width="84" height="10" rx="5" fill="#64748b" fill-opacity="0.6"/>
+    <rect x="0" y="106" width="110" height="10" rx="5" fill="#64748b" fill-opacity="0.9"/>
+    <rect x="0" y="124" width="100" height="10" rx="5" fill="#64748b" fill-opacity="0.75"/>
+    <rect x="0" y="142" width="110" height="10" rx="5" fill="#64748b" fill-opacity="0.9"/>
+    <rect x="0" y="160" width="90" height="10" rx="5" fill="#64748b" fill-opacity="0.6"/>
+    <text x="0" y="196" fill="#8b7262">58,881 tokens</text>
+    <path d="M118 104 H136" stroke="#7c5a45" stroke-width="2" stroke-dasharray="4 4"/>
+    <!-- the mark -->
+    <rect x="140" y="70" width="68" height="68" rx="20" fill="url(#mark)"/>
+    <rect x="153" y="86" width="42" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.55"/>
+    <rect x="153" y="100" width="30" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.75"/>
+    <rect x="153" y="114" width="17" height="7" rx="3.5" fill="#ffffff"/>
+    <circle cx="188" cy="117" r="6" fill="#ffffff"/>
+    <path d="M212 104 H238" stroke="#fb923c" stroke-width="2"/>
+    <!-- outgoing context: few bars -->
+    <rect x="244" y="82" width="110" height="10" rx="5" fill="#fb923c"/>
+    <rect x="244" y="100" width="72" height="10" rx="5" fill="#fdba74"/>
+    <rect x="244" y="118" width="94" height="10" rx="5" fill="#34d399"/>
+    <text x="244" y="152" fill="#fdba74">2,951 tokens</text>
+    <text x="244" y="170" fill="#6ee7b7">7 of 7 facts kept</text>
+  </g>
+</svg>

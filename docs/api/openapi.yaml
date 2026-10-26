@@ -217,6 +217,7 @@ paths:
       tags:
       - auth
       summary: Sign out
+      description: 'Ends this session server-side too: the token is refused until it expires.'
       operationId: logout_api_v1_auth_logout_post
       responses:
         '200':
@@ -732,7 +733,7 @@ paths:
     get:
       tags:
       - runs
-      summary: Stored input and output (STORE_CONTENT only)
+      summary: Stored input and output (STORE_CONTENT only, admins)
       operationId: run_content_api_v1_runs__run_id__content_get
       parameters:
       - name: run_id
@@ -1242,6 +1243,12 @@ components:
           type: string
           format: date-time
           title: Created At
+        started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Started At
         finished_at:
           anyOf:
           - type: string
@@ -1309,6 +1316,12 @@ components:
           type: string
           format: date-time
           title: Created At
+        started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Started At
         finished_at:
           anyOf:
           - type: string
@@ -1444,6 +1457,7 @@ components:
       properties:
         type:
           type: string
+          maxLength: 64
           title: Type
         text:
           anyOf:
@@ -1956,6 +1970,7 @@ components:
         name:
           anyOf:
           - type: string
+            maxLength: 256
           - type: 'null'
           title: Name
         tool_calls:
@@ -1968,6 +1983,7 @@ components:
         tool_call_id:
           anyOf:
           - type: string
+            maxLength: 256
           - type: 'null'
           title: Tool Call Id
       additionalProperties: true
@@ -3294,9 +3310,11 @@ components:
       properties:
         id:
           type: string
+          maxLength: 256
           title: Id
         type:
           type: string
+          maxLength: 64
           title: Type
           default: function
         function:
@@ -3311,6 +3329,7 @@ components:
       properties:
         name:
           type: string
+          maxLength: 256
           title: Name
         arguments:
           type: string

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="t d">
+  <title id="t">The ContextForge pipeline</title>
+  <desc id="d">Eight stages: ingest, measure, protect, clean, rank, compress, validate, return. The token count falls at clean and compress; protect and validate guard what must survive.</desc>
+  <defs>
+    <filter id="s" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.10"/></filter>
+  </defs>
+  <rect width="1200" height="300" rx="16" fill="#f7f5f3"/>
+  <g font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+    <g filter="url(#s)" fill="#fff">
+      <rect x="30" y="40" width="130" height="150" rx="12"/>
+      <rect x="175" y="40" width="130" height="150" rx="12"/>
+      <rect x="320" y="40" width="130" height="150" rx="12"/>
+      <rect x="465" y="40" width="130" height="150" rx="12"/>
+      <rect x="610" y="40" width="130" height="150" rx="12"/>
+      <rect x="755" y="40" width="130" height="150" rx="12"/>
+      <rect x="900" y="40" width="130" height="150" rx="12"/>
+      <rect x="1045" y="40" width="125" height="150" rx="12"/>
+    </g>
+    <g font-size="11" fill="#c2410c" font-weight="700" letter-spacing="1">
+      <text x="46" y="66">01</text><text x="191" y="66">02</text><text x="336" y="66">03</text><text x="481" y="66">04</text>
+      <text x="626" y="66">05</text><text x="771" y="66">06</text><text x="916" y="66">07</text><text x="1061" y="66">08</text>
+    </g>
+    <g font-size="15" font-weight="650" fill="#0f172a">
+      <text x="46" y="88">Ingest</text><text x="191" y="88">Measure</text><text x="336" y="88">Protect</text><text x="481" y="88">Clean</text>
+      <text x="626" y="88">Rank</text><text x="771" y="88">Compress</text><text x="916" y="88">Validate</text><text x="1061" y="88">Return</text>
+    </g>
+    <g font-size="11.5" fill="#64748b">
+      <text x="46" y="112">validate input,</text><text x="46" y="128">detect workload,</text><text x="46" y="144">pick the profile</text>
+      <text x="191" y="112">the model's own</text><text x="191" y="128">tokenizer, or a</text><text x="191" y="144">marked estimate</text>
+      <text x="336" y="112">system, recent</text><text x="336" y="128">turns, pins, tool</text><text x="336" y="144">pairs, citations</text>
+      <text x="481" y="112">duplicates, tool</text><text x="481" y="128">bulk, repeated</text><text x="481" y="144">runs, noise</text>
+      <text x="626" y="112">BM25 relevance,</text><text x="626" y="128">recency and</text><text x="626" y="144">importance</text>
+      <text x="771" y="112">budget per</text><text x="771" y="128">category, extracts,</text><text x="771" y="144">a summary</text>
+      <text x="916" y="112">recount, budget,</text><text x="916" y="128">structure, facts,</text><text x="916" y="144">citations</text>
+      <text x="1061" y="112">context, stats,</text><text x="1061" y="128">warnings and</text><text x="1061" y="144">a trace</text>
+    </g>
+    <!-- token level: falls at clean and compress -->
+    <rect x="30" y="226" width="420" height="14" rx="7" fill="#94a3b8"/>
+    <rect x="465" y="226" width="275" height="14" rx="7" fill="#cbb5a5"/>
+    <rect x="755" y="226" width="415" height="14" rx="7" fill="#ea580c"/>
+    <g font-size="12" fill="#475569">
+      <text x="30" y="264">58,881 tokens in (a coding agent, 79 messages)</text>
+      <text x="465" y="264">duplicates and test runs collapsed</text>
+      <text x="755" y="264">2,951 tokens out, 7 of 7 facts kept, budget met</text>
+    </g>
+  </g>
+</svg>
